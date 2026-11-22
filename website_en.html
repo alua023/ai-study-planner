@@ -1,0 +1,936 @@
+<title>AI Study Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: sticky section nav, one wide column; the planner is a two-panel workbench (inputs left, live result right).
+   Colour: cool paper + ink, cobalt accent; green = Ready / NextTopic, amber = Beginner / Review. */
+:root{
+  --bg:#F1F5F8; --surface:#FFFFFF; --surface2:#E7EEF3; --ink:#11202B; --muted:#51626E; --line:#D2DCE3;
+  --accent:#2447C7; --accent-ink:#FFFFFF; --accent-soft:#E3E9FB;
+  --ready:#117A58; --ready-soft:#DDF3EA; --begin:#B85B05; --begin-soft:#FBEBD8;
+  --bad:#B93434; --bad-soft:#F9E0E0;
+  --font-display:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D151B; --surface:#15202A; --surface2:#1C2A36; --ink:#E5EDF2; --muted:#93A5B2; --line:#2B3B48;
+    --accent:#86A2FF; --accent-ink:#0D151B; --accent-soft:#1C2A52;
+    --ready:#44CDA0; --ready-soft:#12352B; --begin:#F2A453; --begin-soft:#3B2A14;
+    --bad:#FF8279; --bad-soft:#40201F; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D151B; --surface:#15202A; --surface2:#1C2A36; --ink:#E5EDF2; --muted:#93A5B2; --line:#2B3B48;
+  --accent:#86A2FF; --accent-ink:#0D151B; --accent-soft:#1C2A52;
+  --ready:#44CDA0; --ready-soft:#12352B; --begin:#F2A453; --begin-soft:#3B2A14;
+  --bad:#FF8279; --bad-soft:#40201F; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:64px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.55;
+  padding-block:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--surface)}
+.wrap{max-width:1120px;margin:0 auto}
+h1,h2,h3{font-family:var(--font-display);line-height:1.15;text-wrap:balance;margin:0}
+h2{font-size:clamp(1.6rem,3.2vw,2.2rem);letter-spacing:-.01em}
+h3{font-size:1.1rem}
+p{margin:0}
+code,.mono{font-family:var(--font-mono);font-size:.92em}
+a{color:var(--accent)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+.eyebrow{font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.num{font-variant-numeric:tabular-nums}
+
+/* nav */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line);
+  margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px))) calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.topbar-in{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:20px;height:52px}
+.brand{font-family:var(--font-display);font-weight:700;white-space:nowrap}
+.nav{display:flex;gap:4px;overflow-x:auto;flex:1;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav a{padding:6px 10px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:.92rem;white-space:nowrap;font-weight:500}
+.nav a:hover{background:var(--surface2);color:var(--ink)}
+.themebtn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:.85rem;white-space:nowrap}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;align-items:center;padding-block:48px 40px}
+.hero h1{font-size:clamp(2.2rem,5.4vw,3.6rem);letter-spacing:-.02em}
+.hero .lead{font-size:1.15rem;color:var(--muted);margin-top:16px;max-width:52ch}
+.cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+  cursor:pointer;font-weight:600;text-decoration:none;color:var(--ink);min-height:44px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{padding:6px 12px;min-height:36px;font-size:.9rem}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--surface2);font-size:.82rem;font-weight:500;color:var(--muted)}
+.pipe{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.pipe svg{width:100%;height:auto;display:block}
+.pipe .nbox{fill:var(--surface2);stroke:var(--line)}
+.pipe .t1{fill:var(--ink);font:700 15px var(--font-display)}
+.pipe .t2{fill:var(--muted);font:500 12.5px var(--font-body)}
+.pipe .lab{fill:var(--accent);font:500 12px var(--font-mono)}
+.pipe .arr{fill:none;stroke:var(--muted);stroke-width:1.6}
+
+/* sections */
+section{padding-block:44px;border-top:1px solid var(--line)}
+.sec-head{display:grid;gap:8px;margin-bottom:24px;max-width:70ch}
+.sec-head p{color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;min-width:0}
+.panel h3{margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.planner{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}
+.sticky{position:sticky;top:calc(64px + env(safe-area-inset-top,0px))}
+.tabs{display:inline-flex;background:var(--surface2);border-radius:10px;padding:3px;margin-bottom:16px}
+.tabs button{border:0;background:transparent;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:.92rem;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+/* answers */
+.strip{display:flex;gap:6px;flex-wrap:wrap}
+.ans{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;font:500 .85rem var(--font-mono);border:1px solid var(--line);background:var(--surface2);color:var(--muted)}
+.ans.c{background:var(--ready-soft);color:var(--ready);border-color:transparent}
+.ans.p{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.ans.w{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.opt{display:block;width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;margin-top:8px;font-family:var(--font-mono);font-size:.95rem;min-height:44px}
+.opt:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
+.opt:disabled{cursor:default}
+.opt.show-c{border-color:var(--ready);background:var(--ready-soft)}
+.opt.show-w,.opt.show-p{opacity:.75}
+.opt.picked{outline:2px solid var(--accent)}
+.codeblock{font-family:var(--font-mono);background:var(--surface2);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:10px 0;font-size:.92rem;overflow-x:auto}
+.progress{height:6px;border-radius:6px;background:var(--surface2);overflow:hidden;margin-bottom:14px}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.note{font-size:.9rem;color:var(--muted)}
+.fb{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--surface2);font-size:.93rem}
+.slot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.seg{display:inline-flex;gap:4px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;cursor:pointer;font:500 .85rem var(--font-mono);min-height:36px}
+.seg button[aria-pressed="true"].c{background:var(--ready);color:var(--accent-ink);border-color:var(--ready)}
+.seg button[aria-pressed="true"].p{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg button[aria-pressed="true"].w{background:var(--bad);color:var(--accent-ink);border-color:var(--bad)}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+
+/* result */
+.verdict{display:grid;gap:4px;padding:16px;border-radius:12px;margin-top:14px}
+.verdict.review{background:var(--begin-soft)} .verdict.next{background:var(--ready-soft)}
+.verdict .big{font:700 1.7rem var(--font-display)}
+.verdict.review .big{color:var(--begin)} .verdict.next .big{color:var(--ready)}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.kv div{background:var(--surface2);border-radius:10px;padding:8px 10px}
+.kv b{display:block;font:600 1.2rem var(--font-mono)}
+.kv span{font-size:.78rem;color:var(--muted)}
+.why{margin-top:12px;font-size:.93rem;color:var(--muted)}
+
+/* algo cards */
+.algo{display:grid;gap:12px;align-content:start}
+.algo .tag{display:flex;align-items:center;gap:8px}
+.badge{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:700 .85rem var(--font-display)}
+.formula{font-family:var(--font-mono);font-size:.88rem;background:var(--surface2);border-radius:8px;padding:8px 10px;overflow-x:auto;white-space:nowrap}
+details{border-top:1px solid var(--line);padding-top:10px}
+details summary{cursor:pointer;font-weight:600;font-size:.92rem;color:var(--accent)}
+details pre{font-family:var(--font-mono);font-size:.82rem;overflow-x:auto;background:var(--surface2);border-radius:8px;padding:10px;margin:8px 0 0;white-space:pre}
+.bars{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:18px}
+.bar{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:4px}
+.bar i{display:block;width:100%;max-width:44px;background:var(--accent);border-radius:6px 6px 0 0;min-height:2px;transition:height .35s}
+.bar small{font:500 .74rem var(--font-mono);color:var(--muted)}
+.bar em{font:500 .78rem var(--font-mono);font-style:normal}
+.hmm{padding:2px;display:grid;grid-template-columns:76px repeat(var(--n,5),minmax(0,1fr));gap:4px;font:500 .74rem var(--font-mono);overflow-x:auto}
+.hmm div{padding:6px 4px;border-radius:6px;background:var(--surface2);text-align:center;min-width:0}
+.hmm .hd{background:transparent;color:var(--muted)}
+.hmm .path-b{background:var(--begin-soft);color:var(--begin);font-weight:600;outline:1.5px solid var(--begin)}
+.hmm .path-r{background:var(--ready-soft);color:var(--ready);font-weight:600;outline:1.5px solid var(--ready)}
+.meter{height:12px;border-radius:8px;background:var(--begin-soft);overflow:hidden;display:flex}
+.meter i{display:block;background:var(--ready);height:100%;transition:width .35s}
+.legend{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin-top:4px}
+.qtable{width:100%;border-collapse:collapse;font-size:.88rem}
+.qtable th,.qtable td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);font-family:var(--font-mono)}
+.qtable th:first-child,.qtable td:first-child{text-align:left}
+.hb{display:grid;gap:6px}
+.hrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 58px;gap:10px;align-items:center;padding:7px 10px;border-radius:10px;border:1px solid transparent;font-size:.86rem}
+.hrow.on{border-color:var(--accent);background:var(--accent-soft)}
+.hrow .nm{font-family:var(--font-mono);font-size:.8rem;overflow-wrap:anywhere}
+.track{position:relative;height:10px;background:var(--surface2);border-radius:6px}
+.track i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:6px}
+.track u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.hrow .sc{font-family:var(--font-mono);text-align:right}
+.step-dot{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:600 .7rem var(--font-mono);margin-right:6px}
+
+/* compare */
+.cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cmp .col{background:var(--surface2);border-radius:12px;padding:12px}
+.diff{outline:2px solid var(--accent);border-radius:6px;padding:0 4px}
+/* lab */
+.sliders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}
+.sl label{display:flex;justify-content:space-between;font-size:.9rem;font-weight:500}
+.sl input{width:100%;accent-color:var(--accent)}
+.sl small{color:var(--muted);display:block}
+/* games */
+.game .q{font-size:1.05rem;margin:8px 0 12px}
+.score{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pill{padding:4px 12px;border-radius:999px;background:var(--surface2);font:500 .85rem var(--font-mono)}
+.row-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.msg{padding:10px 12px;border-radius:10px;margin-top:12px;font-size:.93rem}
+.msg.ok{background:var(--ready-soft)} .msg.no{background:var(--bad-soft)} .msg.info{background:var(--surface2)}
+.ladder{display:flex;gap:6px;margin:10px 0}
+.ladder button{flex:1;min-width:0;padding:10px 4px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font:500 .78rem var(--font-mono);cursor:pointer;min-height:44px}
+.ladder button.here{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ladder button.seen{background:var(--accent-soft)}
+input[type=range].big{width:100%;accent-color:var(--accent);margin:8px 0}
+/* tables */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table.crit{border-collapse:collapse;width:100%;min-width:640px;font-size:.92rem}
+table.crit th,table.crit td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.crit th{background:var(--surface2);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ok{color:var(--ready);font-weight:700}
+.evalbar{display:grid;grid-template-columns:minmax(0,170px) 1fr 60px;gap:10px;align-items:center;margin:8px 0;font-size:.9rem}
+.evalbar .track{height:16px}
+.evalbar .track i{background:var(--accent)}
+.evalbar.sys .track i{background:var(--ready)}
+.tl{display:grid;gap:10px;counter-reset:s}
+.tl .seg-t{display:grid;grid-template-columns:70px minmax(0,1fr);gap:14px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.tl .time{font:600 .85rem var(--font-mono);color:var(--accent)}
+.tl h4{margin:0 0 4px;font:700 1rem var(--font-display)}
+.tl p{font-size:.93rem;color:var(--muted)}
+.faq details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.faq details[open]{border-color:var(--accent)}
+.faq p{margin-top:8px;font-size:.94rem;color:var(--muted)}
+.road{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.road .panel{padding:16px}
+.road p{font-size:.92rem;color:var(--muted);margin-top:6px}
+pre.src{font-family:var(--font-mono);font-size:.8rem;line-height:1.5;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;max-height:480px;margin:12px 0 0;white-space:pre}
+.cmdline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface2);border-radius:10px;padding:8px 10px;margin-top:8px}
+.cmdline code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap}
+footer{padding-block:32px 48px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+@media (max-width:900px){
+  .hero,.planner,.grid2,.grid3,.road{grid-template-columns:minmax(0,1fr)}
+  .sticky{position:static}
+  .hero{padding-block:28px}
+  .sliders{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:520px){
+  .brand{display:none}
+  .cmp{grid-template-columns:minmax(0,1fr)}
+  .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tl .seg-t{grid-template-columns:minmax(0,1fr);gap:4px}
+  .evalbar{grid-template-columns:minmax(0,110px) 1fr 52px}
+  .hrow{grid-template-columns:minmax(0,1fr) 56px}
+  .hrow .track{display:none}
+}
+</style>
+
+<div class="topbar"><div class="topbar-in">
+  <span class="brand">AI Study Planner</span>
+  <nav class="nav" aria-label="Sections">
+    <a href="#demo">Demo</a><a href="#how">How it works</a><a href="#lab">Parameter lab</a><a href="#games">Games</a>
+    <a href="#eval">Evaluation</a><a href="#criteria">Criteria</a>
+  </nav>
+  <button class="themebtn" id="themeBtn" type="button" aria-label="Switch theme">Theme</button>
+</div></div>
+
+<main class="wrap">
+<div class="hero">
+  <div>
+    <p class="eyebrow">AI Fundamentals · Final Project · Topic 01 Mini Adaptive Quiz Coach</p>
+    <h1 style="margin-top:10px">AI Study Planner</h1>
+    <p class="lead">A student answers five Python questions. The system looks past the score to what the student actually knows, then decides what to do next: review the topic or move on, and which exercise to give.</p>
+    <div class="cta">
+      <a class="btn primary" href="#demo">Take the quiz</a>
+      <a class="btn" href="#games">Interactive games</a>
+      <a class="btn" href="#criteria">Assignment criteria</a>
+    </div>
+    <div class="facts">
+      <span class="chip">Bayes</span><span class="chip">HMM · Viterbi</span><span class="chip">MDP · Bellman</span><span class="chip">Hill Climbing</span>
+    </div>
+  </div>
+  <div class="pipe" aria-label="Pipeline: answers to Bayes and HMM, then MDP, then Hill Climbing, then exercise">
+    <svg viewBox="0 0 720 250" role="img">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+      <rect class="nbox" x="0" y="95" width="110" height="60" rx="12"/><text class="t1" x="14" y="122">Answers</text><text class="t2" x="14" y="141">5 questions</text>
+      <rect class="nbox" x="170" y="12" width="150" height="66" rx="12"/><text class="t1" x="184" y="40">1 · Bayes</text><text class="t2" x="184" y="60">P(knows topic)</text>
+      <rect class="nbox" x="170" y="172" width="150" height="66" rx="12"/><text class="t1" x="184" y="200">2 · HMM</text><text class="t2" x="184" y="220">hidden level</text>
+      <rect class="nbox" x="380" y="172" width="150" height="66" rx="12"/><text class="t1" x="394" y="200">3 · MDP</text><text class="t2" x="394" y="220">Review / Next</text>
+      <rect class="nbox" x="570" y="95" width="150" height="66" rx="12"/><text class="t1" x="584" y="123">4 · Hill Climbing</text><text class="t2" x="584" y="143">best exercise</text>
+      <path class="arr" marker-end="url(#ah)" d="M110 125 C140 125 140 45 168 45"/>
+      <path class="arr" marker-end="url(#ah)" d="M110 125 C140 125 140 205 168 205"/>
+      <path class="arr" marker-end="url(#ah)" d="M320 45 H645 V93"/><text class="lab" x="470" y="36">P(K)</text>
+      <path class="arr" marker-end="url(#ah)" d="M320 205 H378"/><text class="lab" x="326" y="196">belief</text>
+      <path class="arr" marker-end="url(#ah)" d="M530 205 H645 V163"/><text class="lab" x="560" y="196">action</text>
+    </svg>
+  </div>
+</div>
+
+<section id="demo">
+  <div class="sec-head">
+    <p class="eyebrow">Live demo</p>
+    <h2>Take the quiz and watch the system think</h2>
+    <p>All four algorithms are recomputed after every answer. A sample student, Dana, is loaded so the full calculation is visible right away. Press "Start quiz" to enter your own answers.</p>
+  </div>
+  <div class="planner">
+    <div class="panel">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tabQuiz" aria-selected="true">Quiz</button>
+        <button role="tab" id="tabManual" aria-selected="false">Set answers manually</button>
+      </div>
+      <div id="leftPane"></div>
+    </div>
+    <div class="panel sticky" id="outPanel"></div>
+  </div>
+  <div class="grid2" style="margin-top:16px" id="algoCards"></div>
+  <div class="panel" style="margin-top:16px" id="orderExp"></div>
+</section>
+
+<section id="how">
+  <div class="sec-head">
+    <p class="eyebrow">How it works</p>
+    <h2>Four algorithms, one chain</h2>
+    <p>The output of each step is the input of the next, so this is one product and not four unrelated exercises.</p>
+  </div>
+  <div class="grid2" id="howCards"></div>
+  <div class="panel" style="margin-top:16px"><h3>Model assumptions</h3>
+    <p class="note" style="margin-bottom:10px">All probabilities and rewards are set by hand, as the assignment allows. They can be changed in the parameter lab below.</p>
+    <div class="tw"><table class="crit" style="min-width:560px"><thead><tr><th>Algorithm</th><th>Input parameters</th></tr></thead><tbody>
+      <tr><td>Bayes</td><td>P(knows) = 0.40; P(correct | knows) = 0.85; P(correct | doesn't know) = 0.25. An "almost correct" answer counts as incorrect here.</td></tr>
+      <tr><td>HMM</td><td>Start (Beginner 0.7, Ready 0.3); transitions B→B 0.7, B→R 0.3, R→B 0.1, R→R 0.9; emissions B (0.5; 0.3; 0.2), R (0.1; 0.3; 0.6) for Wrong, Partial, Correct.</td></tr>
+      <tr><td>MDP</td><td>γ = 0.9; V(Beginner) = 0, V(Ready) = 10; rewards: Beginner: Review +4, NextTopic −3; Ready: Review +1, NextTopic +6.</td></tr>
+      <tr><td>Hill Climbing</td><td>5 exercises per type; target success 70%; score = 1 − |P(success) − 0.70|.</td></tr>
+    </tbody></table></div></div>
+</section>
+
+<section id="lab">
+  <div class="sec-head">
+    <p class="eyebrow">Parameter lab</p>
+    <h2>What happens if the assumptions change</h2>
+    <p>Every probability in the project is set by hand. Move the sliders and see how the demo above reacts.</p>
+  </div>
+  <div class="panel">
+    <div class="sliders" id="sliders"></div>
+    <div class="row-btns"><button class="btn small" id="labReset" type="button">Restore values from the code</button><a class="btn small" href="#demo">Back to the demo</a></div>
+    <p class="note" style="margin-top:10px" id="labNote"></p>
+  </div>
+</section>
+
+<section id="games">
+  <div class="sec-head">
+    <p class="eyebrow">Games</p>
+    <h2>Interactive examples</h2>
+    <p>Four mini-games show how each algorithm reaches a decision. They can be played together with the audience.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel game" id="gameA"></div>
+    <div class="panel game" id="gameB"></div>
+    <div class="panel game" id="gameC"></div>
+    <div class="panel game" id="gameD"></div>
+  </div>
+</section>
+
+<section id="eval">
+  <div class="sec-head">
+    <p class="eyebrow">Results and evaluation</p>
+    <h2>How often the system is right</h2>
+    <p>Tested on 2000 synthetic students generated by the same HMM. The "correct" action is Review if the true level is Beginner, otherwise NextTopic.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel">
+      <h3>Python run (seed 42)</h3>
+      <div id="evalPy"></div>
+      <p class="note" style="margin-top:10px">These are the numbers in the README and in <code>sample_output.txt</code>.</p>
+    </div>
+    <div class="panel">
+      <h3>Run the simulation in the browser</h3>
+      <div class="sl"><label for="simN"><span>Students</span><span class="mono" id="simNv">2000</span></label><input id="simN" type="range" min="200" max="20000" step="200" value="2000"></div>
+      <div class="sl" style="margin-top:8px"><label for="simSeed"><span>Seed</span><span class="mono" id="simSeedv">42</span></label><input id="simSeed" type="range" min="1" max="99" step="1" value="42"></div>
+      <div class="row-btns"><button class="btn primary small" id="simRun" type="button">Run</button></div>
+      <div id="evalJs" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div class="msg info">Caveat: the data comes from the same model, so this checks the decision logic and is not proof of real-world quality. The browser uses a different random number generator, so its figures are close to Python's but not identical to the decimal.</div>
+  <div class="road" style="margin-top:16px">
+    <div class="panel"><h3>Data instead of assumptions</h3><p>Learn the HMM and the guessing probabilities from real student answers (Baum-Welch algorithm).</p></div>
+    <div class="panel"><h3>Many topics</h3><p>A Bayesian network: knowing loops influences functions, functions influence recursion.</p></div>
+    <div class="panel"><h3>A weekly plan</h3><p>Value iteration or Q-learning instead of a single Bellman step, and Simulated Annealing for a large exercise bank.</p></div>
+  </div>
+</section>
+
+<section id="criteria">
+  <div class="sec-head">
+    <p class="eyebrow">Assignment criteria</p>
+    <h2>What was required and where it is met</h2>
+  </div>
+  <div class="tw"><table class="crit">
+    <thead><tr><th>Criterion</th><th></th><th>How it is met</th><th>Where to look</th></tr></thead>
+    <tbody>
+      <tr><td>Real-world problem and idea</td><td class="ok">✓</td><td>Work out what a student knows from noisy answers and suggest the next step: adaptive learning, as in online courses.</td><td><a href="#demo">Demo</a></td></tr>
+      <tr><td>At least 3 algorithms from different topics</td><td class="ok">✓</td><td>Four: Bayes (probability), HMM (Lecture 7), MDP (decision making), Hill Climbing (local search).</td><td><a href="#how">How it works</a></td></tr>
+      <tr><td>Algorithms serve one goal</td><td class="ok">✓</td><td>P(knows) and the level belief feed the MDP and Hill Climbing, and the output is one exercise.</td><td><a href="#demo">"What to do next" card</a></td></tr>
+      <tr><td>Working implementation</td><td class="ok">✓</td><td><code>study_planner.py</code>: demo, <code>--ask</code> mode, built-in tests. This site repeats the same formulas in the browser.</td><td><a href="#demo">Demo</a></td></tr>
+      <tr><td>Explanation of each algorithm</td><td class="ok">✓</td><td>For each: input, calculation, output, why it was chosen, formulas.</td><td><a href="#how">How it works</a></td></tr>
+      <tr><td>Results, evaluation, improvements</td><td class="ok">✓</td><td>Three students, a 2000-student simulation against two baselines, a development plan.</td><td><a href="#eval">Evaluation</a></td></tr>
+      <tr><td>Source code and documentation</td><td class="ok">✓</td><td>Submitted with the project: <code>study_planner.py</code>, <code>README.md</code> and <code>sample_output.txt</code>.</td><td>Project files</td></tr>
+      <tr><td>Live demonstration and defense</td><td class="ok">✓</td><td>The interactive demo on this page and the console version <code>python study_planner.py</code>.</td><td><a href="#demo">Demo</a></td></tr>
+      <tr><td>Creativity and practical relevance</td><td class="ok">✓</td><td>Picks an exercise that is "hard but doable" (70% target success), plus games and a parameter lab.</td><td><a href="#games">Games</a></td></tr>
+      <tr><td>Understanding of the algorithms</td><td class="ok">✓</td><td>Every step expands into formulas and numbers, and the games show the decision logic.</td><td><a href="#games">Games</a></td></tr>
+      <tr><td>Checklist: inputs, assumptions, steps, outputs visible</td><td class="ok">✓</td><td>All assumptions in tables, every step with a formula and numbers, expandable calculations.</td><td><a href="#demo">Algorithm cards</a></td></tr>
+      <tr><td>Checklist: a test and small scope</td><td class="ok">✓</td><td>4 groups of tests (<code>ALL TESTS PASSED</code>), 5 questions, 2 states, 3 observations, 2 actions.</td><td><a href="#how">Assumptions</a></td></tr>
+      <tr><td>Future development</td><td class="ok">✓</td><td>Student data, a Bayesian network over topics, Q-learning, a Telegram bot.</td><td><a href="#eval">Evaluation</a></td></tr>
+    </tbody></table></div>
+</section>
+</main>
+<footer><div class="wrap">AI Study Planner · AI Fundamentals final project · Topic 01. Probabilities and rewards are assumptions of a teaching model. The code was developed with an AI assistant; the authors reviewed it and can explain it.</div></footer>
+
+<script>
+/* Core algorithms: pure functions, no DOM. Mirrors study_planner.py exactly. */
+const Core = (function () {
+  const H = ["Beginner", "Ready"];
+  const ACTIONS = ["Review", "NextTopic"];
+  const D = { prior: 0.40, pCK: 0.85, pCN: 0.25, target: 0.70, gamma: 0.90 };
+  const P = Object.assign({}, D);
+  const PI = { Beginner: 0.7, Ready: 0.3 };
+  const A = { Beginner: { Beginner: 0.7, Ready: 0.3 }, Ready: { Beginner: 0.1, Ready: 0.9 } };
+  const B = {
+    Beginner: { Wrong: 0.5, Partial: 0.3, Correct: 0.2 },
+    Ready: { Wrong: 0.1, Partial: 0.3, Correct: 0.6 }
+  };
+  const T = {
+    Beginner: { Review: { Beginner: 0.5, Ready: 0.5 }, NextTopic: { Beginner: 0.9, Ready: 0.1 } },
+    Ready: { Review: { Beginner: 0.1, Ready: 0.9 }, NextTopic: { Beginner: 0.2, Ready: 0.8 } }
+  };
+  const R = { Beginner: { Review: 4, NextTopic: -3 }, Ready: { Review: 1, NextTopic: 6 } };
+  const V0 = { Beginner: 0, Ready: 10 };
+  const EX = {
+    Review: [
+      ["R1 print 1..10 with for", 0.98, 0.75],
+      ["R2 sum of a list with for", 0.95, 0.60],
+      ["R3 loop + if (even numbers)", 0.92, 0.45],
+      ["R4 nested loops (pattern)", 0.88, 0.30],
+      ["R5 while loop with break", 0.85, 0.20]
+    ],
+    NextTopic: [
+      ["N1 define a simple function", 0.95, 0.55],
+      ["N2 function with parameters", 0.92, 0.40],
+      ["N3 function returning a value", 0.88, 0.28],
+      ["N4 recursion: factorial", 0.80, 0.15],
+      ["N5 recursion: Fibonacci", 0.72, 0.08]
+    ]
+  };
+
+  function reset() { Object.assign(P, D); }
+
+  function bayes(ans) {
+    let p = P.prior; const steps = [];
+    for (const a of ans) {
+      const c = a === "Correct";
+      const lk = c ? P.pCK : 1 - P.pCK;
+      const ln = c ? P.pCN : 1 - P.pCN;
+      const num = lk * p;
+      const post = num / (num + ln * (1 - p));
+      steps.push({ a, c, lk, ln, prior: p, post });
+      p = post;
+    }
+    return { steps, p };
+  }
+
+  function viterbi(obs) {
+    if (!obs.length) return { delta: [], back: [], path: [], prob: null };
+    const delta = [{}], back = [{}];
+    H.forEach(h => { delta[0][h] = PI[h] * B[h][obs[0]]; });
+    for (let t = 1; t < obs.length; t++) {
+      const d = {}, bp = {};
+      for (const h of H) {
+        let bestPrev = H[0], best = -1;
+        for (const p of H) {
+          const v = delta[t - 1][p] * A[p][h];
+          if (v > best) { best = v; bestPrev = p; }
+        }
+        bp[h] = bestPrev;
+        d[h] = best * B[h][obs[t]];
+      }
+      delta.push(d); back.push(bp);
+    }
+    const n = obs.length;
+    let last = H[0];
+    for (const h of H) if (delta[n - 1][h] > delta[n - 1][last]) last = h;
+    const path = [last];
+    for (let t = n - 1; t > 0; t--) path.push(back[t][path[path.length - 1]]);
+    path.reverse();
+    return { delta, back, path, prob: delta[n - 1][last] };
+  }
+
+  function forward(obs) {
+    let alpha = {};
+    H.forEach(h => { alpha[h] = PI[h] * B[h][obs[0]]; });
+    for (let t = 1; t < obs.length; t++) {
+      const nxt = {};
+      for (const h of H) {
+        let s = 0;
+        for (const p of H) s += alpha[p] * A[p][h];
+        nxt[h] = s * B[h][obs[t]];
+      }
+      alpha = nxt;
+    }
+    const z = H.reduce((s, h) => s + alpha[h], 0);
+    const out = {};
+    H.forEach(h => { out[h] = alpha[h] / z; });
+    return out;
+  }
+
+  function qValue(s, a) {
+    let q = 0;
+    for (const s2 of H) {
+      const p = T[s][a][s2];
+      if (p) q += p * (R[s][a] + P.gamma * V0[s2]);
+    }
+    return q;
+  }
+
+  function mdp(belief) {
+    const qs = {};
+    H.forEach(s => { qs[s] = {}; ACTIONS.forEach(a => { qs[s][a] = qValue(s, a); }); });
+    const q = {};
+    ACTIONS.forEach(a => { q[a] = H.reduce((sum, s) => sum + belief[s] * qs[s][a], 0); });
+    const action = q.Review >= q.NextTopic && q.Review > q.NextTopic ? "Review"
+      : (q.NextTopic > q.Review ? "NextTopic" : "Review");
+    return { qs, q, action };
+  }
+
+  function exSuccess(ex, pk) { return ex[1] * pk + ex[2] * (1 - pk); }
+  function exScore(ex, pk) { return 1 - Math.abs(exSuccess(ex, pk) - P.target); }
+
+  function hill(bank, pk, start) {
+    let cur = start || 0;
+    const path = [cur];
+    for (;;) {
+      const sc = exScore(bank[cur], pk);
+      const nb = [cur - 1, cur + 1].filter(i => i >= 0 && i < bank.length);
+      let best = nb[0];
+      for (const i of nb) if (exScore(bank[i], pk) > exScore(bank[best], pk)) best = i;
+      if (exScore(bank[best], pk) <= sc) return { idx: cur, path };
+      cur = best; path.push(cur);
+    }
+  }
+
+  function analyze(ans) {
+    const b = bayes(ans);
+    const v = viterbi(ans);
+    const belief = ans.length ? forward(ans) : Object.assign({}, PI);
+    const m = mdp(belief);
+    const bank = EX[m.action];
+    const h = hill(bank, b.p, 0);
+    return { ans, bayes: b, vit: v, belief, mdp: m, bank, hill: h, pk: b.p,
+             exercise: bank[h.idx], success: exSuccess(bank[h.idx], b.p) };
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function simulate(n, nAns, seed) {
+    const rng = mulberry32(seed);
+    const draw = (dist) => {
+      const r = rng(); let c = 0, k = null;
+      for (const key in dist) { k = key; c += dist[key]; if (r < c) return key; }
+      return k;
+    };
+    const hits = { system: 0, always: 0, rule: 0 };
+    for (let i = 0; i < n; i++) {
+      let h = draw(PI); const levels = [], answers = [];
+      for (let t = 0; t < nAns; t++) {
+        levels.push(h); answers.push(draw(B[h])); h = draw(A[h]);
+      }
+      const truth = levels[levels.length - 1] === "Beginner" ? "Review" : "NextTopic";
+      if (mdp(forward(answers)).action === truth) hits.system++;
+      if (truth === "NextTopic") hits.always++;
+      const rule = answers.filter(x => x === "Correct").length >= 3 ? "NextTopic" : "Review";
+      if (rule === truth) hits.rule++;
+    }
+    return { system: hits.system / n, always: hits.always / n, rule: hits.rule / n, n };
+  }
+
+  return { H, ACTIONS, D, P, PI, A, B, T, R, V0, EX, reset, bayes, viterbi, forward,
+           qValue, mdp, exSuccess, exScore, hill, analyze, simulate };
+})();
+if (typeof module !== "undefined") module.exports = Core;
+
+</script>
+<script>
+(function () {
+"use strict";
+const C = Core;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+const f2 = (x) => x.toFixed(2), f3 = (x) => x.toFixed(3), pct = (x) => Math.round(x * 100) + "%";
+const SYM = { Correct: "✓", Partial: "≈", Wrong: "✕" };
+const LBL = { Correct: "correct", Partial: "almost", Wrong: "wrong" };
+const CLS = { Correct: "c", Partial: "p", Wrong: "w" };
+const KIND = { c: "Correct", p: "Partial", w: "Wrong" };
+const seq = (s) => s.split("").map((ch) => KIND[ch.toLowerCase()]);
+const ACT = { Review: "Review the topic", NextTopic: "Move to the next topic" };
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+/* ---------------- quiz data ---------------- */
+const QS = [
+  { code: "for i in range(3):\n    print(i)", q: "What does this code print?",
+    opts: [{ t: "1 2 3", k: "p" }, { t: "0 1 2", k: "c" }, { t: "nothing, it raises an error", k: "w" }],
+    why: "range(3) yields 0, 1, 2. \"1 2 3\" is almost right: an off-by-one error at the start." },
+  { code: "total = 0\nfor x in [1, 2, 3]:\n    total += x\nprint(total)", q: "What is total at the end?",
+    opts: [{ t: "6", k: "c" }, { t: "3", k: "p" }, { t: "[1, 2, 3]", k: "w" }],
+    why: "The loop adds 1 + 2 + 3 = 6. \"3\" is what you get by keeping only the last element." },
+  { code: "for i in range(1, 6, 2):\n    print(i)", q: "Which numbers are printed?",
+    opts: [{ t: "1 2 3 4 5", k: "w" }, { t: "1 3", k: "p" }, { t: "1 3 5", k: "c" }],
+    why: "Step 2 gives 1, 3, 5. The upper bound 6 is excluded, but 5 is below 6, so 5 is printed too." },
+  { code: "x = 5\nwhile x > 2:\n    x -= 1\nprint(x)", q: "What is x at the end?",
+    opts: [{ t: "5", k: "w" }, { t: "2", k: "c" }, { t: "3", k: "p" }],
+    why: "The loop runs while x > 2. As soon as x becomes 2 the condition is false and the loop stops." },
+  { code: "def f(a, b=2):\n    return a * b\n\nprint(f(3))", q: "What does the program print?",
+    opts: [{ t: "Error: missing argument", k: "w" }, { t: "5", k: "p" }, { t: "6", k: "c" }],
+    why: "b defaults to 2, so 3 * 2 = 6. \"5\" comes from adding instead of multiplying." }
+];
+
+/* ---------------- state ---------------- */
+const PRESETS = { Aida: "WWPWP", Dana: "WPWCC", Aibek: "CCPCC", "Order A": "WWWCC", "Order B": "CCWWW" };
+const st = { answers: seq(PRESETS.Dana), who: "Dana (sample)", tab: "quiz", active: false, qi: 0, fb: null };
+const cur = () => st.answers.filter(Boolean);
+
+/* ---------------- left pane ---------------- */
+function presetsHtml() {
+  return '<div class="presets" aria-label="Ready-made examples">' +
+    ["Aida", "Dana", "Aibek"].map((n) => `<button class="btn small" data-preset="${n}" type="button">${n}</button>`).join("") + "</div>" +
+    '<p class="note" style="margin-top:8px">Aida answers weakly, Dana is improving, Aibek is confident.</p>';
+}
+function renderLeft() {
+  const el = $("leftPane");
+  if (st.tab === "quiz") {
+    if (!st.active) {
+      el.innerHTML = `<h3>Python mini-quiz</h3>
+      <p>Five short questions on loops and functions. Each has a correct answer, an almost-correct one and a wrong one. The system tells all three apart.</p>
+      <div class="row-btns"><button class="btn primary" id="qStart" type="button">Start quiz</button></div>
+      <p class="note" style="margin-top:16px">Or load a ready-made student:</p>${presetsHtml()}`;
+      $("qStart").onclick = () => { st.answers = [null, null, null, null, null]; st.who = "Participant"; st.active = true; st.qi = 0; st.fb = null; renderAll(); };
+    } else if (st.qi >= QS.length) {
+      el.innerHTML = `<h3>Done!</h3><p>All five answers are counted. The result panel and the cards below show what the system decided and why.</p>
+      <div class="strip" style="margin-top:12px">${stripHtml()}</div>
+      <div class="row-btns"><button class="btn primary" id="qAgain" type="button">Take it again</button><a class="btn" href="#orderExp">Answer-order experiment</a></div>`;
+      $("qAgain").onclick = () => { st.answers = [null, null, null, null, null]; st.qi = 0; st.fb = null; renderAll(); };
+    } else {
+      const q = QS[st.qi];
+      el.innerHTML = `<div class="progress" aria-hidden="true"><i style="width:${(st.qi / QS.length) * 100}%"></i></div>
+      <p class="eyebrow">Question ${st.qi + 1} of ${QS.length}</p>
+      <p style="margin-top:6px">${esc(q.q)}</p><div class="codeblock">${esc(q.code)}</div>
+      <div id="opts">${q.opts.map((o, i) => {
+        let c = "opt";
+        if (st.fb) { c += " show-" + o.k; if (st.fb.idx === i) c += " picked"; }
+        return `<button class="${c}" data-i="${i}" ${st.fb ? "disabled" : ""} type="button">${esc(o.t)}</button>`;
+      }).join("")}</div>
+      ${st.fb ? `<div class="fb"><b>Counted as "${LBL[KIND[st.fb.k]]}" (${KIND[st.fb.k]}).</b> ${esc(q.why)}</div>
+      <div class="row-btns"><button class="btn primary" id="qNext" type="button">${st.qi === QS.length - 1 ? "Show result" : "Next"}</button></div>` : ""}`;
+      el.querySelectorAll(".opt").forEach((b) => b.onclick = () => {
+        const i = +b.dataset.i, k = q.opts[i].k;
+        st.answers[st.qi] = KIND[k]; st.fb = { k, idx: i }; renderAll();
+      });
+      const nx = $("qNext"); if (nx) nx.onclick = () => { st.qi++; st.fb = null; renderAll(); };
+    }
+  } else {
+    const rows = [0, 1, 2, 3, 4].map((i) => `<div class="slot"><span class="mono">Answer ${i + 1}</span><span class="seg" role="group" aria-label="Answer ${i + 1}">${
+      ["Wrong", "Partial", "Correct"].map((k) => `<button class="${CLS[k]}" data-slot="${i}" data-k="${k}" aria-pressed="${st.answers[i] === k}" type="button">${SYM[k]} ${LBL[k]}</button>`).join("")}</span></div>`).join("");
+    el.innerHTML = `<h3>Manual answers</h3><p class="note">Set any sequence of answers and see how the decision changes.</p>${rows}${presetsHtml()}
+    <div class="row-btns"><button class="btn small" id="mClear" type="button">Clear</button></div>`;
+    el.querySelectorAll("[data-slot]").forEach((b) => b.onclick = () => { st.answers[+b.dataset.slot] = b.dataset.k; st.who = "Manual input"; st.active = false; renderAll(); });
+    $("mClear").onclick = () => { st.answers = [null, null, null, null, null]; st.who = "Manual input"; renderAll(); };
+  }
+  el.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => {
+    const n = b.dataset.preset; st.answers = seq(PRESETS[n]); st.who = n; st.active = false; st.qi = 0; st.fb = null; renderAll();
+  });
+}
+function stripHtml() {
+  return [0, 1, 2, 3, 4].map((i) => {
+    const a = st.answers[i];
+    return a ? `<span class="ans ${CLS[a]}">${i + 1} ${SYM[a]} ${LBL[a]}</span>` : `<span class="ans">${i + 1} …</span>`;
+  }).join("");
+}
+
+/* ---------------- result panel ---------------- */
+function renderOut() {
+  const ans = cur(), r = C.analyze(ans);
+  const next = r.mdp.action === "NextTopic";
+  let html = `<p class="eyebrow">Student: ${esc(st.who)}</p><div class="strip" style="margin-top:8px">${stripHtml()}</div>`;
+  if (!ans.length) html += `<p class="why">No answers yet. Showing the starting values: a 40% prior and the HMM initial distribution.</p>`;
+  html += `<div class="verdict ${next ? "next" : "review"}" aria-live="polite">
+    <span class="eyebrow">What to do next</span><span class="big">${ACT[r.mdp.action]}</span>
+    <span class="mono" style="font-size:.9rem">${esc(r.exercise[0])}</span></div>
+  <div class="kv"><div><b>${pct(r.pk)}</b><span>knows the topic (Bayes)</span></div><div><b>${pct(r.belief.Ready)}</b><span>level Ready (HMM)</span></div><div><b>${pct(r.success)}</b><span>success chance on the exercise</span></div></div>
+  <p class="why">Expected value: Review ${f2(r.mdp.q.Review)} versus NextTopic ${f2(r.mdp.q.NextTopic)}, so "${r.mdp.action}" is chosen.
+  Of the five exercises of this type, ${esc(r.exercise[0].split(" ")[0])} fits best: the target is ${pct(C.P.target)} success and the student has ${pct(r.success)}.</p>`;
+  $("outPanel").innerHTML = html;
+}
+
+/* ---------------- algorithm cards ---------------- */
+function cardHead(n, title, why) {
+  return `<div class="tag"><span class="badge">${n}</span><h3 style="margin:0">${title}</h3></div><p class="note">${why}</p>`;
+}
+function renderAlgos() {
+  const ans = cur(), r = C.analyze(ans), n = ans.length;
+  /* 1 Bayes */
+  const pts = [{ l: "start", v: C.P.prior }].concat(r.bayes.steps.map((s, i) => ({ l: String(i + 1), v: s.post })));
+  const bars = pts.map((p) => `<div class="bar"><em>${f2(p.v)}</em><i style="height:${Math.max(2, p.v * 80)}px"></i><small>${p.l}</small></div>`).join("");
+  const last = r.bayes.steps[n - 1];
+  const bform = last ? `P(K|${last.c ? "correct" : "wrong"}) = ${f2(last.lk)}·${f3(last.prior)} / (${f2(last.lk)}·${f3(last.prior)} + ${f2(last.ln)}·${f3(1 - last.prior)}) = ${f3(last.post)}` : "P(K) = prior belief";
+  const bdet = r.bayes.steps.map((s, i) => `answer ${i + 1}: ${s.c ? "correct" : "wrong  "} ${f3(s.prior)} → ${f3(s.post)}`).join("\n") || "no answers";
+  const c1 = `<div class="panel algo">${cardHead(1, "Bayes: does the student know the topic?", "Answers are noisy (a guess or a slip), so the belief is updated instead of taken at face value.")}
+    <div class="bars" role="img" aria-label="Probability of knowing the topic after each answer">${bars}</div>
+    <div class="formula">${esc(bform)}</div>
+    <details><summary>Show the calculation for every step</summary><pre>${esc(bdet)}
+An "almost correct" (Partial) answer counts as wrong in this step.</pre></details></div>`;
+  /* 2 HMM */
+  let grid = "";
+  if (n) {
+    const head = ans.map((a, i) => `<div class="hd">${i + 1} ${SYM[a]}</div>`).join("");
+    const row = (h, cls) => `<div class="hd" style="text-align:left">${h}</div>` + r.vit.delta.map((d, t) => `<div class="${r.vit.path[t] === h ? cls : ""}">${d[h].toFixed(5)}</div>`).join("");
+    grid = `<div class="hmm" style="--n:${n}"><div class="hd"></div>${head}${row("Beginner", "path-b")}${row("Ready", "path-r")}</div>`;
+  } else grid = `<p class="note">Waiting for the first answer.</p>`;
+  const pr = r.belief.Ready * 100;
+  const c2 = `<div class="panel algo">${cardHead(2, "HMM: what is the level right now?", "The level is hidden and changes over time. An HMM takes answer order into account, which Bayes alone cannot.")}
+    ${grid}
+    <div><div class="meter" role="img" aria-label="Probability of level Ready ${pct(r.belief.Ready)}"><i style="width:${pr}%"></i></div>
+    <div class="legend"><span>Beginner ${pct(r.belief.Beginner)}</span><span>Ready ${pct(r.belief.Ready)}</span></div></div>
+    <div class="formula">Viterbi: ${n ? esc(r.vit.path.join(" → ")) : "—"}</div>
+    <details><summary>Formulas</summary><pre>delta_t(h) = max_h' [ delta_{t-1}(h')·A(h'→h) ] · B(h, answer_t)
+The highlighted cells form the most likely path.
+Belief now (forward): P(Ready) = ${f3(r.belief.Ready)}</pre></details></div>`;
+  /* 3 MDP */
+  const qs = r.mdp.qs, q = r.mdp.q, mx = Math.max(Math.abs(q.Review), Math.abs(q.NextTopic), 1);
+  const w = (v) => Math.max(0, v) / mx * 100;
+  const c3 = `<div class="panel algo">${cardHead(3, "MDP: review or move on?", "Reward now plus discounted future value. The exact level is unknown, so we average using the belief from the HMM.")}
+    <table class="qtable"><thead><tr><th>Q(s, a)</th><th>Review</th><th>NextTopic</th></tr></thead><tbody>
+      <tr><td>Beginner</td><td>${f2(qs.Beginner.Review)}</td><td>${f2(qs.Beginner.NextTopic)}</td></tr>
+      <tr><td>Ready</td><td>${f2(qs.Ready.Review)}</td><td>${f2(qs.Ready.NextTopic)}</td></tr></tbody></table>
+    <div class="hb">${["Review", "NextTopic"].map((a) => `<div class="hrow ${r.mdp.action === a ? "on" : ""}" style="grid-template-columns:90px minmax(0,1fr) 58px"><span class="nm">${a}</span><div class="track"><i style="width:${w(q[a])}%"></i></div><span class="sc">${f2(q[a])}</span></div>`).join("")}</div>
+    <div class="formula">Q(Beginner,Review) = 0.5·(4+γ·0) + 0.5·(4+γ·10) = ${f2(C.qValue("Beginner", "Review"))}</div>
+    <details><summary>How the averaging works</summary><pre>E[Q(a)] = P(Beginner)·Q(Beginner,a) + P(Ready)·Q(Ready,a)
+Review:    ${f3(r.belief.Beginner)}·${f2(qs.Beginner.Review)} + ${f3(r.belief.Ready)}·${f2(qs.Ready.Review)} = ${f3(q.Review)}
+NextTopic: ${f3(r.belief.Beginner)}·${f2(qs.Beginner.NextTopic)} + ${f3(r.belief.Ready)}·${f2(qs.Ready.NextTopic)} = ${f3(q.NextTopic)}
+γ = ${f2(C.P.gamma)}</pre></details></div>`;
+  /* 4 Hill */
+  const rows = r.bank.map((ex, i) => {
+    const s = C.exSuccess(ex, r.pk), step = r.hill.path.indexOf(i);
+    return `<div class="hrow ${i === r.hill.idx ? "on" : ""}"><span class="nm">${step >= 0 ? `<span class="step-dot">${step + 1}</span>` : ""}${esc(ex[0])}</span>
+      <div class="track" aria-hidden="true"><i style="width:${s * 100}%"></i><u style="left:${C.P.target * 100}%"></u></div><span class="sc">${f3(C.exScore(ex, r.pk))}</span></div>`;
+  }).join("");
+  const c4 = `<div class="panel algo">${cardHead(4, "Hill Climbing: which exercise?", `The MDP chose the "${r.mdp.action}" type. We step from easy to hard while the score improves. The black mark is the ${pct(C.P.target)} success target.`)}
+    <div class="hb">${rows}</div>
+    <div class="formula">score = 1 − |P(success) − ${f2(C.P.target)}|, P(knows) = ${f3(r.pk)}</div>
+    <details><summary>Search path</summary><pre>${r.hill.path.map((i, k) => `step ${k + 1}: ${r.bank[i][0]}  P(success)=${f3(C.exSuccess(r.bank[i], r.pk))}  score=${f3(C.exScore(r.bank[i], r.pk))}`).join("\n")}
+Stop: no neighbor is better than the current exercise.</pre></details></div>`;
+  $("algoCards").innerHTML = c1 + c2 + c3 + c4;
+}
+
+/* ---------------- order experiment ---------------- */
+function renderOrder() {
+  const ans = cur();
+  if (ans.length < 3) {
+    $("orderExp").innerHTML = `<h3>Experiment: answer order</h3><p class="note">At least 3 answers are needed. Load an example or answer the questions.</p>`; return;
+  }
+  const a = C.analyze(ans), b = C.analyze(ans.slice().reverse());
+  const same = Math.abs(a.pk - b.pk) < 1e-9, diffAct = a.mdp.action !== b.mdp.action;
+  const col = (r, title) => `<div class="col"><b>${title}</b><div class="strip" style="margin:8px 0">${r.ans.map((x) => `<span class="ans ${CLS[x]}">${SYM[x]}</span>`).join("")}</div>
+    <div>Bayes P(knows): <b class="mono">${f3(r.pk)}</b></div><div>HMM P(Ready): <b class="mono ${same && Math.abs(a.belief.Ready - b.belief.Ready) > 1e-6 ? "diff" : ""}">${f3(r.belief.Ready)}</b></div>
+    <div>Action: <b class="${diffAct ? "diff" : ""}">${r.mdp.action}</b></div><div class="mono" style="font-size:.85rem">${esc(r.exercise[0])}</div></div>`;
+  $("orderExp").innerHTML = `<h3>Experiment: the same answers in reverse order</h3>
+    <div class="cmp">${col(a, "As entered")}${col(b, "Reversed")}</div>
+    <p class="why">${same ? "Bayes returns the same probability, because for it only the set of answers matters. " : ""}${
+      Math.abs(a.belief.Ready - b.belief.Ready) > 1e-6 ? "The HMM gives a different level estimate, because for it what came last matters: improvement or decline. " : ""}${
+      diffAct ? "As a result the decision for the student changes. This is why the HMM is needed in the project." : "Here the decision is the same, but try the \"Order A\" example: WWWCC versus CCWWW."}</p>
+    <div class="row-btns"><button class="btn small" data-preset="Order A" type="button">Load WWWCC</button><button class="btn small" data-preset="Order B" type="button">Load CCWWW</button></div>`;
+  $("orderExp").querySelectorAll("[data-preset]").forEach((b2) => b2.onclick = () => {
+    st.answers = seq(PRESETS[b2.dataset.preset]); st.who = b2.dataset.preset; st.active = false; renderAll();
+  });
+}
+
+/* ---------------- how it works (static explainers) ---------------- */
+const HOW = [
+  { n: 1, t: "Bayes", q: "Does the student know the topic?", idea: "The prior belief is 40%. Each answer updates it: a correct answer raises it, a wrong one lowers it, but never to exactly zero or one, because guesses and slips happen.",
+    f: "P(K|e) = P(e|K)·P(K) / [ P(e|K)·P(K) + P(e|¬K)·P(¬K) ]", ex: "A wrong answer at belief 0.40: 0.15·0.40 / (0.15·0.40 + 0.75·0.60) = 0.06 / 0.51 = 0.118.", why: "Answers are noisy, and Bayes handles noise in a principled way." },
+  { n: 2, t: "HMM and Viterbi", q: "What is the student's level right now?", idea: "The level, Beginner or Ready, is hidden and the answers only reflect it. Viterbi finds the most likely sequence of levels, and the forward algorithm gives the probability of the level now.",
+    f: "delta_t(h) = max_h' [ delta_{t-1}(h')·A(h'→h) ] · B(h, o_t)", ex: "Dana: WPWCC gives Beginner, Beginner, Beginner, Ready, Ready. The probability of Ready now is 0.876.", why: "The level changes over time, so answer order matters." },
+  { n: 3, t: "MDP and Bellman", q: "Review or move on?", idea: "For each action we compute the expected value: reward now plus discounted future value. Because the state is not known exactly, we average using the belief from the HMM.",
+    f: "Q(s,a) = Σ P(s'|s,a)·[ R(s,a) + γ·V(s') ]", ex: "Q(Beginner, Review) = 0.5·4 + 0.5·13 = 8.5. For Dana: NextTopic 11.30 versus Review 9.03.", why: "A decision has to be made under uncertainty." },
+  { n: 4, t: "Hill Climbing", q: "Which exercise to give?", idea: "Exercises are sorted from easy to hard. A neighbor is slightly easier or slightly harder. The score measures how close the success chance is to 70%, meaning hard but doable.",
+    f: "score = 1 − |P(success) − 0.70|,  P(success) = a·P(K) + b·(1 − P(K))", ex: "Aibek, P(K)=0.947: N1 → N2 → N3 → N4 → N5, and the score rises to 0.986. N5, recursion, is chosen.", why: "We need the best item in a set by a score, stepping between neighbors." }
+];
+function renderHow() {
+  $("howCards").innerHTML = HOW.map((h) => `<div class="panel algo"><div class="tag"><span class="badge">${h.n}</span><h3 style="margin:0">${h.t}</h3></div>
+    <p class="eyebrow">Question: ${h.q}</p><p>${h.idea}</p><div class="formula">${esc(h.f)}</div>
+    <p class="note"><b>Example.</b> ${esc(h.ex)}</p><p class="note"><b>Why it was chosen.</b> ${h.why}</p></div>`).join("");
+}
+
+/* ---------------- lab ---------------- */
+const SL = [
+  { k: "prior", l: "Prior belief P(knows)", min: 0.05, max: 0.95, step: 0.01, h: "before the first answer" },
+  { k: "pCK", l: "P(correct | knows)", min: 0.5, max: 0.99, step: 0.01, h: "1 minus the chance of a careless slip" },
+  { k: "pCN", l: "P(correct | doesn't know)", min: 0.02, max: 0.5, step: 0.01, h: "the chance of a lucky guess" },
+  { k: "target", l: "Target: success chance on the exercise", min: 0.5, max: 0.95, step: 0.01, h: "how hard the exercise should be" }
+];
+function renderLab() {
+  $("sliders").innerHTML = SL.map((s) => `<div class="sl"><label for="sl_${s.k}"><span>${s.l}</span><span class="mono" id="slv_${s.k}">${f2(C.P[s.k])}</span></label>
+    <input id="sl_${s.k}" type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${C.P[s.k]}"><small>${s.h}</small></div>`).join("");
+  SL.forEach((s) => { $("sl_" + s.k).oninput = (e) => { C.P[s.k] = +e.target.value; $("slv_" + s.k).textContent = f2(C.P[s.k]); renderAll(true); }; });
+  labNote();
+}
+function labNote() {
+  const r = C.analyze(cur());
+  $("labNote").textContent = `Right now for "${st.who}": P(knows) = ${f3(r.pk)}, decision ${r.mdp.action}, exercise ${r.exercise[0]}.`;
+}
+$("labReset").onclick = () => { C.reset(); renderLab(); renderAll(true); };
+
+/* ---------------- games ---------------- */
+function head(title, sub) { return `<p class="eyebrow">${sub}</p><h3 style="margin-top:4px">${title}</h3>`; }
+
+/* A: guess the decision */
+const GA = { pool: [], i: 0, score: 0, done: false, shown: false };
+function gaInit() { GA.pool = shuffle(["WWWCC", "CCWWW", "WWCCC", "CWCCP", "PPPPP", "WPWPW", "CCCCC", "WWWWC", "CWWWC", "PCPCP", "CCPWW", "WCWCW"]).slice(0, 6); GA.i = 0; GA.score = 0; GA.done = false; GA.shown = false; }
+function gaRender() {
+  const el = $("gameA");
+  if (GA.done) {
+    el.innerHTML = head("Guess the system's decision", "Game 1") + `<div class="msg info">Final score: ${GA.score} of ${GA.pool.length}. ${GA.score >= 5 ? "Your reasoning matches the MDP." : GA.score >= 3 ? "Not bad. Answer order matters: the latest answers weigh more." : "Pay attention to the end of the sequence."}</div><div class="row-btns"><button class="btn primary" id="gaAgain" type="button">Play again</button></div>`;
+    $("gaAgain").onclick = () => { gaInit(); gaRender(); }; return;
+  }
+  const s = GA.pool[GA.i], r = C.analyze(seq(s));
+  const rule = s.split("").filter((c) => c === "C").length >= 3 ? "NextTopic" : "Review";
+  el.innerHTML = head("Guess the system's decision", "Game 1") + `<div class="score"><span class="pill">Round ${GA.i + 1} / ${GA.pool.length}</span><span class="pill">Score ${GA.score}</span></div>
+    <p class="q">A student answered like this. What will the system recommend?</p><div class="strip">${seq(s).map((a, i) => `<span class="ans ${CLS[a]}">${i + 1} ${SYM[a]}</span>`).join("")}</div>
+    <div class="row-btns"><button class="btn" data-g="Review" type="button" ${GA.shown ? "disabled" : ""}>Review</button><button class="btn" data-g="NextTopic" type="button" ${GA.shown ? "disabled" : ""}>NextTopic</button></div>
+    <div id="gaFb"></div>`;
+  el.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => {
+    if (GA.shown) return; GA.shown = true;
+    const ok = b.dataset.g === r.mdp.action; if (ok) GA.score++;
+    $("gaFb").innerHTML = `<div class="msg ${ok ? "ok" : "no"}"><b>${ok ? "Correct!" : "Not this time."}</b> The system chose ${r.mdp.action}: probability of Ready ${pct(r.belief.Ready)}, Q(Review) ${f2(r.mdp.q.Review)}, Q(NextTopic) ${f2(r.mdp.q.NextTopic)}.
+      ${rule !== r.mdp.action ? `The simple rule "3 or more correct" would be wrong here: it would say ${rule}.` : ""}</div><div class="row-btns"><button class="btn primary small" id="gaNext" type="button">${GA.i === GA.pool.length - 1 ? "Result" : "Next"}</button></div>`;
+    el.querySelectorAll("[data-g]").forEach((x) => x.disabled = true);
+    $("gaNext").onclick = () => { GA.i++; GA.shown = false; if (GA.i >= GA.pool.length) GA.done = true; gaRender(); };
+  });
+}
+
+/* B: Bayes detective */
+const GB = { rounds: ["C", "WW", "CWC", "CCC", "WWCW"], i: 0, pts: 0, shown: false, done: false };
+function gbRender() {
+  const el = $("gameB");
+  if (GB.done) {
+    el.innerHTML = head("Bayes detective", "Game 2") + `<div class="msg info">Final score: ${GB.pts} of ${GB.rounds.length * 100}. ${GB.pts >= 400 ? "Excellent probabilistic intuition." : "Intuition and the formula often disagree, which is exactly why the formula is needed."}</div><div class="row-btns"><button class="btn primary" id="gbAgain" type="button">Play again</button></div>`;
+    $("gbAgain").onclick = () => { GB.i = 0; GB.pts = 0; GB.shown = false; GB.done = false; gbRender(); }; return;
+  }
+  const s = GB.rounds[GB.i];
+  el.innerHTML = head("Bayes detective", "Game 2") + `<div class="score"><span class="pill">Round ${GB.i + 1} / ${GB.rounds.length}</span><span class="pill">Score ${GB.pts}</span></div>
+    <p class="q">The prior belief is ${pct(C.P.prior)}. The student answered like this. What is the probability that they know the topic?</p>
+    <div class="strip">${seq(s).map((a, i) => `<span class="ans ${CLS[a]}">${i + 1} ${SYM[a]}</span>`).join("")}</div>
+    <label class="sl" for="gbS" style="display:block;margin-top:12px"><span class="mono" id="gbV" style="font-size:1.4rem;font-weight:600">50%</span></label>
+    <input class="big" id="gbS" type="range" min="0" max="100" step="1" value="50" ${GB.shown ? "disabled" : ""}>
+    <div class="row-btns"><button class="btn primary" id="gbOk" type="button" ${GB.shown ? "disabled" : ""}>Check</button></div><div id="gbFb"></div>`;
+  $("gbS").oninput = (e) => { $("gbV").textContent = e.target.value + "%"; };
+  $("gbOk").onclick = () => {
+    GB.shown = true; const g = +$("gbS").value / 100, r = C.bayes(seq(s)), d = Math.abs(g - r.p);
+    const pt = Math.max(0, Math.round(100 - d * 200)); GB.pts += pt;
+    $("gbS").disabled = true; $("gbOk").disabled = true;
+    $("gbFb").innerHTML = `<div class="msg ${d < 0.1 ? "ok" : "info"}"><b>+${pt} points.</b> Your estimate was ${pct(g)}, the formula gives ${pct(r.p)} (${f3(r.p)}). Steps: ${r.steps.map((x) => f2(x.post)).join(" → ")}.</div>
+      <div class="row-btns"><button class="btn primary small" id="gbNext" type="button">${GB.i === GB.rounds.length - 1 ? "Result" : "Next"}</button></div>`;
+    $("gbNext").onclick = () => { GB.i++; GB.shown = false; if (GB.i >= GB.rounds.length) GB.done = true; gbRender(); };
+  };
+}
+
+/* C: be the hill climber */
+const GC = { pks: [], i: 0, cur: 0, evals: 1, seen: [0], pts: 0, shown: false, done: false };
+function gcInit() { GC.pks = shuffle([0.05, 0.3, 0.55, 0.8, 0.97]); GC.i = 0; GC.pts = 0; GC.done = false; gcStart(); }
+function gcStart() { GC.cur = 0; GC.evals = 1; GC.seen = [0]; GC.shown = false; }
+function gcRender() {
+  const el = $("gameC");
+  if (GC.done) {
+    el.innerHTML = head("You are Hill Climbing", "Game 3") + `<div class="msg info">Final score: ${GC.pts} of ${GC.pks.length}. The best exercise was found in ${GC.pts} of ${GC.pks.length} rounds while seeing only the current and already visited exercises.</div><div class="row-btns"><button class="btn primary" id="gcAgain" type="button">Play again</button></div>`;
+    $("gcAgain").onclick = () => { gcInit(); gcRender(); }; return;
+  }
+  const pk = GC.pks[GC.i], bank = pk < 0.5 ? C.EX.Review : C.EX.NextTopic;
+  const sc = (i) => C.exScore(bank[i], pk);
+  el.innerHTML = head("You are Hill Climbing", "Game 3") + `<div class="score"><span class="pill">Round ${GC.i + 1} / ${GC.pks.length}</span><span class="pill">Score ${GC.pts}</span><span class="pill">Evaluations ${GC.evals}</span></div>
+    <p class="q">The student knows the topic with ${pct(pk)} probability. The goal is an exercise with about ${pct(C.P.target)} chance of success. Start with the easiest one and step to a neighbor while the score improves.</p>
+    <div class="ladder">${bank.map((ex, i) => `<button data-i="${i}" class="${i === GC.cur ? "here" : GC.seen.includes(i) ? "seen" : ""}" type="button">${ex[0].split(" ")[0]}</button>`).join("")}</div>
+    <div class="mono">${esc(bank[GC.cur][0])}<br>P(success) ${f3(C.exSuccess(bank[GC.cur], pk))} · score ${f3(sc(GC.cur))}</div>
+    <div class="row-btns"><button class="btn small" id="gcL" type="button" ${GC.shown || GC.cur === 0 ? "disabled" : ""}>← Easier</button><button class="btn small" id="gcR" type="button" ${GC.shown || GC.cur === bank.length - 1 ? "disabled" : ""}>Harder →</button><button class="btn primary small" id="gcStop" type="button" ${GC.shown ? "disabled" : ""}>Stop: this is the peak</button></div><div id="gcFb"></div>`;
+  const move = (d) => { const n = GC.cur + d; if (n < 0 || n >= bank.length || GC.shown) return; GC.cur = n; if (!GC.seen.includes(n)) { GC.seen.push(n); GC.evals++; } gcRender(); };
+  $("gcL").onclick = () => move(-1); $("gcR").onclick = () => move(1);
+  el.querySelectorAll(".ladder button").forEach((b) => b.onclick = () => { const d = +b.dataset.i - GC.cur; if (Math.abs(d) === 1) move(d); });
+  $("gcStop").onclick = () => {
+    GC.shown = true; const best = C.hill(bank, pk, 0).idx, ok = GC.cur === best; if (ok) GC.pts++;
+    el.querySelectorAll("button").forEach((b) => { if (!b.dataset.i) b.disabled = true; });
+    $("gcFb").innerHTML = `<div class="msg ${ok ? "ok" : "no"}"><b>${ok ? "That is the peak!" : "Not the peak."}</b> The algorithm stops at ${esc(bank[best][0].split(" ")[0])} (score ${f3(sc(best))}).${ok ? "" : " Yours scores " + f3(sc(GC.cur)) + ": a neighbor was better."}
+      There is only one peak here, so the greedy step does not get stuck. With several peaks, random restarts or Simulated Annealing would help.</div>
+      <div class="row-btns"><button class="btn primary small" id="gcNext" type="button">${GC.i === GC.pks.length - 1 ? "Result" : "Next"}</button></div>`;
+    $("gcNext").onclick = () => { GC.i++; if (GC.i >= GC.pks.length) GC.done = true; else gcStart(); gcRender(); };
+  };
+}
+
+/* D: order matters */
+const GD = { pairs: [["WWWCC", "CCWWW"], ["CWCWC", "WCWCC"], ["WWCCC", "CCCWW"], ["PWPCC", "CCPWP"]], i: 0, pts: 0, shown: false, done: false };
+function gdRender() {
+  const el = $("gameD");
+  if (GD.done) {
+    el.innerHTML = head("Who is in better shape now?", "Game 4") + `<div class="msg info">Final score: ${GD.pts} of ${GD.pairs.length}. Main takeaway: the set of answers is the same, but the latest answers show where the student is now.</div><div class="row-btns"><button class="btn primary" id="gdAgain" type="button">Play again</button></div>`;
+    $("gdAgain").onclick = () => { GD.i = 0; GD.pts = 0; GD.shown = false; GD.done = false; gdRender(); }; return;
+  }
+  const [a, b] = GD.pairs[GD.i], ra = C.analyze(seq(a)), rb = C.analyze(seq(b));
+  const strip = (s) => `<div class="strip">${seq(s).map((x) => `<span class="ans ${CLS[x]}">${SYM[x]}</span>`).join("")}</div>`;
+  el.innerHTML = head("Who is in better shape now?", "Game 4") + `<div class="score"><span class="pill">Round ${GD.i + 1} / ${GD.pairs.length}</span><span class="pill">Score ${GD.pts}</span></div>
+    <p class="q">Two students gave the same set of answers in a different order. Who is more likely to be at level Ready right now?</p>
+    <div class="cmp"><div class="col"><b>Student A</b>${strip(a)}</div><div class="col"><b>Student B</b>${strip(b)}</div></div>
+    <div class="row-btns"><button class="btn" data-g="A" type="button" ${GD.shown ? "disabled" : ""}>A</button><button class="btn" data-g="B" type="button" ${GD.shown ? "disabled" : ""}>B</button></div><div id="gdFb"></div>`;
+  el.querySelectorAll("[data-g]").forEach((bt) => bt.onclick = () => {
+    if (GD.shown) return; GD.shown = true;
+    const win = ra.belief.Ready >= rb.belief.Ready ? "A" : "B", ok = bt.dataset.g === win; if (ok) GD.pts++;
+    el.querySelectorAll("[data-g]").forEach((x) => x.disabled = true);
+    $("gdFb").innerHTML = `<div class="msg ${ok ? "ok" : "no"}"><b>${ok ? "Correct!" : "No."}</b> A: Ready ${pct(ra.belief.Ready)}, B: Ready ${pct(rb.belief.Ready)}. Bayes gives the same value for both: ${pct(ra.pk)} and ${pct(rb.pk)}. Only the HMM sees the difference.</div>
+      <div class="row-btns"><button class="btn primary small" id="gdNext" type="button">${GD.i === GD.pairs.length - 1 ? "Result" : "Next"}</button></div>`;
+    $("gdNext").onclick = () => { GD.i++; GD.shown = false; if (GD.i >= GD.pairs.length) GD.done = true; gdRender(); };
+  });
+}
+
+/* ---------------- evaluation ---------------- */
+function evalBars(res) {
+  const rows = [["System (HMM + MDP)", res.system, "sys"], ["Always NextTopic", res.always, ""], ["Rule: 3+ correct", res.rule, ""]];
+  return rows.map((r) => `<div class="evalbar ${r[2]}"><span>${r[0]}</span><div class="track"><i style="width:${r[1] * 100}%"></i></div><b class="mono">${(r[1] * 100).toFixed(1)}%</b></div>`).join("");
+}
+function renderEval() {
+  $("evalPy").innerHTML = evalBars({ system: 0.759, always: 0.702, rule: 0.576 });
+  $("simN").oninput = (e) => { $("simNv").textContent = e.target.value; };
+  $("simSeed").oninput = (e) => { $("simSeedv").textContent = e.target.value; };
+  const run = () => {
+    const res = C.simulate(+$("simN").value, 5, +$("simSeed").value);
+    $("evalJs").innerHTML = evalBars(res) + `<p class="note">${res.n} students, seed ${$("simSeed").value}. The system is ${res.system > res.always ? "better" : "not better"} than the baselines${res.system > res.always ? " by " + ((res.system - res.always) * 100).toFixed(1) + " percentage points" : ""}.</p>`;
+  };
+  $("simRun").onclick = run; run();
+}
+
+/* ---------------- plumbing ---------------- */
+function renderAll(keepLeft) {
+  if (!keepLeft) renderLeft();
+  renderOut(); renderAlgos(); renderOrder(); labNote();
+}
+$("tabQuiz").onclick = () => { st.tab = "quiz"; $("tabQuiz").setAttribute("aria-selected", "true"); $("tabManual").setAttribute("aria-selected", "false"); renderLeft(); };
+$("tabManual").onclick = () => { st.tab = "manual"; $("tabManual").setAttribute("aria-selected", "true"); $("tabQuiz").setAttribute("aria-selected", "false"); renderLeft(); };
+$("themeBtn").onclick = () => {
+  const root = document.documentElement, attr = root.getAttribute("data-theme");
+  const dark = attr ? attr === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.setAttribute("data-theme", dark ? "light" : "dark");
+};
+
+renderHow(); renderLab(); renderEval();
+gaInit(); gaRender(); gbRender(); gcInit(); gcRender(); gdRender();
+renderAll();
+})();
+
+</script>

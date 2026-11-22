@@ -1,0 +1,942 @@
+<title>AI Study Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: sticky section nav, one wide column; the planner is a two-panel workbench (inputs left, live result right).
+   Colour: cool paper + ink, cobalt accent; green = Ready / NextTopic, amber = Beginner / Review. */
+:root{
+  --bg:#F1F5F8; --surface:#FFFFFF; --surface2:#E7EEF3; --ink:#11202B; --muted:#51626E; --line:#D2DCE3;
+  --accent:#2447C7; --accent-ink:#FFFFFF; --accent-soft:#E3E9FB;
+  --ready:#117A58; --ready-soft:#DDF3EA; --begin:#B85B05; --begin-soft:#FBEBD8;
+  --bad:#B93434; --bad-soft:#F9E0E0;
+  --font-display:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D151B; --surface:#15202A; --surface2:#1C2A36; --ink:#E5EDF2; --muted:#93A5B2; --line:#2B3B48;
+    --accent:#86A2FF; --accent-ink:#0D151B; --accent-soft:#1C2A52;
+    --ready:#44CDA0; --ready-soft:#12352B; --begin:#F2A453; --begin-soft:#3B2A14;
+    --bad:#FF8279; --bad-soft:#40201F; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D151B; --surface:#15202A; --surface2:#1C2A36; --ink:#E5EDF2; --muted:#93A5B2; --line:#2B3B48;
+  --accent:#86A2FF; --accent-ink:#0D151B; --accent-soft:#1C2A52;
+  --ready:#44CDA0; --ready-soft:#12352B; --begin:#F2A453; --begin-soft:#3B2A14;
+  --bad:#FF8279; --bad-soft:#40201F; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:64px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.55;
+  padding-block:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--surface)}
+.wrap{max-width:1120px;margin:0 auto}
+h1,h2,h3{font-family:var(--font-display);line-height:1.15;text-wrap:balance;margin:0}
+h2{font-size:clamp(1.6rem,3.2vw,2.2rem);letter-spacing:-.01em}
+h3{font-size:1.1rem}
+p{margin:0}
+code,.mono{font-family:var(--font-mono);font-size:.92em}
+a{color:var(--accent)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+.eyebrow{font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.num{font-variant-numeric:tabular-nums}
+
+/* nav */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line);
+  margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px))) calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.topbar-in{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:20px;height:52px}
+.brand{font-family:var(--font-display);font-weight:700;white-space:nowrap}
+.nav{display:flex;gap:4px;overflow-x:auto;flex:1;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav a{padding:6px 10px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:.92rem;white-space:nowrap;font-weight:500}
+.nav a:hover{background:var(--surface2);color:var(--ink)}
+.themebtn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:.85rem;white-space:nowrap}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;align-items:center;padding-block:48px 40px}
+.hero h1{font-size:clamp(2.2rem,5.4vw,3.6rem);letter-spacing:-.02em}
+.hero .lead{font-size:1.15rem;color:var(--muted);margin-top:16px;max-width:52ch}
+.cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+  cursor:pointer;font-weight:600;text-decoration:none;color:var(--ink);min-height:44px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{padding:6px 12px;min-height:36px;font-size:.9rem}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--surface2);font-size:.82rem;font-weight:500;color:var(--muted)}
+.pipe{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.pipe svg{width:100%;height:auto;display:block}
+.pipe .nbox{fill:var(--surface2);stroke:var(--line)}
+.pipe .t1{fill:var(--ink);font:700 15px var(--font-display)}
+.pipe .t2{fill:var(--muted);font:500 12.5px var(--font-body)}
+.pipe .lab{fill:var(--accent);font:500 12px var(--font-mono)}
+.pipe .arr{fill:none;stroke:var(--muted);stroke-width:1.6}
+
+/* sections */
+section{padding-block:44px;border-top:1px solid var(--line)}
+.sec-head{display:grid;gap:8px;margin-bottom:24px;max-width:70ch}
+.sec-head p{color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;min-width:0}
+.panel h3{margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.planner{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}
+.sticky{position:sticky;top:calc(64px + env(safe-area-inset-top,0px))}
+.tabs{display:inline-flex;background:var(--surface2);border-radius:10px;padding:3px;margin-bottom:16px}
+.tabs button{border:0;background:transparent;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:.92rem;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+/* answers */
+.strip{display:flex;gap:6px;flex-wrap:wrap}
+.ans{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;font:500 .85rem var(--font-mono);border:1px solid var(--line);background:var(--surface2);color:var(--muted)}
+.ans.c{background:var(--ready-soft);color:var(--ready);border-color:transparent}
+.ans.p{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.ans.w{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.opt{display:block;width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;margin-top:8px;font-family:var(--font-mono);font-size:.95rem;min-height:44px}
+.opt:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
+.opt:disabled{cursor:default}
+.opt.show-c{border-color:var(--ready);background:var(--ready-soft)}
+.opt.show-w,.opt.show-p{opacity:.75}
+.opt.picked{outline:2px solid var(--accent)}
+.codeblock{font-family:var(--font-mono);background:var(--surface2);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:10px 0;font-size:.92rem;overflow-x:auto}
+.progress{height:6px;border-radius:6px;background:var(--surface2);overflow:hidden;margin-bottom:14px}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.note{font-size:.9rem;color:var(--muted)}
+.fb{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--surface2);font-size:.93rem}
+.slot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.seg{display:inline-flex;gap:4px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;cursor:pointer;font:500 .85rem var(--font-mono);min-height:36px}
+.seg button[aria-pressed="true"].c{background:var(--ready);color:var(--accent-ink);border-color:var(--ready)}
+.seg button[aria-pressed="true"].p{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg button[aria-pressed="true"].w{background:var(--bad);color:var(--accent-ink);border-color:var(--bad)}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+
+/* result */
+.verdict{display:grid;gap:4px;padding:16px;border-radius:12px;margin-top:14px}
+.verdict.review{background:var(--begin-soft)} .verdict.next{background:var(--ready-soft)}
+.verdict .big{font:700 1.7rem var(--font-display)}
+.verdict.review .big{color:var(--begin)} .verdict.next .big{color:var(--ready)}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.kv div{background:var(--surface2);border-radius:10px;padding:8px 10px}
+.kv b{display:block;font:600 1.2rem var(--font-mono)}
+.kv span{font-size:.78rem;color:var(--muted)}
+.why{margin-top:12px;font-size:.93rem;color:var(--muted)}
+
+/* algo cards */
+.algo{display:grid;gap:12px;align-content:start}
+.algo .tag{display:flex;align-items:center;gap:8px}
+.badge{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:700 .85rem var(--font-display)}
+.formula{font-family:var(--font-mono);font-size:.88rem;background:var(--surface2);border-radius:8px;padding:8px 10px;overflow-x:auto;white-space:nowrap}
+details{border-top:1px solid var(--line);padding-top:10px}
+details summary{cursor:pointer;font-weight:600;font-size:.92rem;color:var(--accent)}
+details pre{font-family:var(--font-mono);font-size:.82rem;overflow-x:auto;background:var(--surface2);border-radius:8px;padding:10px;margin:8px 0 0;white-space:pre}
+.bars{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:18px}
+.bar{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:4px}
+.bar i{display:block;width:100%;max-width:44px;background:var(--accent);border-radius:6px 6px 0 0;min-height:2px;transition:height .35s}
+.bar small{font:500 .74rem var(--font-mono);color:var(--muted)}
+.bar em{font:500 .78rem var(--font-mono);font-style:normal}
+.hmm{padding:2px;display:grid;grid-template-columns:76px repeat(var(--n,5),minmax(0,1fr));gap:4px;font:500 .74rem var(--font-mono);overflow-x:auto}
+.hmm div{padding:6px 4px;border-radius:6px;background:var(--surface2);text-align:center;min-width:0}
+.hmm .hd{background:transparent;color:var(--muted)}
+.hmm .path-b{background:var(--begin-soft);color:var(--begin);font-weight:600;outline:1.5px solid var(--begin)}
+.hmm .path-r{background:var(--ready-soft);color:var(--ready);font-weight:600;outline:1.5px solid var(--ready)}
+.meter{height:12px;border-radius:8px;background:var(--begin-soft);overflow:hidden;display:flex}
+.meter i{display:block;background:var(--ready);height:100%;transition:width .35s}
+.legend{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin-top:4px}
+.qtable{width:100%;border-collapse:collapse;font-size:.88rem}
+.qtable th,.qtable td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);font-family:var(--font-mono)}
+.qtable th:first-child,.qtable td:first-child{text-align:left}
+.hb{display:grid;gap:6px}
+.hrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 58px;gap:10px;align-items:center;padding:7px 10px;border-radius:10px;border:1px solid transparent;font-size:.86rem}
+.hrow.on{border-color:var(--accent);background:var(--accent-soft)}
+.hrow .nm{font-family:var(--font-mono);font-size:.8rem;overflow-wrap:anywhere}
+.track{position:relative;height:10px;background:var(--surface2);border-radius:6px}
+.track i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:6px}
+.track u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.hrow .sc{font-family:var(--font-mono);text-align:right}
+.step-dot{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:600 .7rem var(--font-mono);margin-right:6px}
+
+/* compare */
+.cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cmp .col{background:var(--surface2);border-radius:12px;padding:12px}
+.diff{outline:2px solid var(--accent);border-radius:6px;padding:0 4px}
+/* lab */
+.sliders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}
+.sl label{display:flex;justify-content:space-between;font-size:.9rem;font-weight:500}
+.sl input{width:100%;accent-color:var(--accent)}
+.sl small{color:var(--muted);display:block}
+/* games */
+.game .q{font-size:1.05rem;margin:8px 0 12px}
+.score{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pill{padding:4px 12px;border-radius:999px;background:var(--surface2);font:500 .85rem var(--font-mono)}
+.row-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.msg{padding:10px 12px;border-radius:10px;margin-top:12px;font-size:.93rem}
+.msg.ok{background:var(--ready-soft)} .msg.no{background:var(--bad-soft)} .msg.info{background:var(--surface2)}
+.ladder{display:flex;gap:6px;margin:10px 0}
+.ladder button{flex:1;min-width:0;padding:10px 4px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font:500 .78rem var(--font-mono);cursor:pointer;min-height:44px}
+.ladder button.here{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ladder button.seen{background:var(--accent-soft)}
+input[type=range].big{width:100%;accent-color:var(--accent);margin:8px 0}
+/* tables */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table.crit{border-collapse:collapse;width:100%;min-width:640px;font-size:.92rem}
+table.crit th,table.crit td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.crit th{background:var(--surface2);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ok{color:var(--ready);font-weight:700}
+.evalbar{display:grid;grid-template-columns:minmax(0,170px) 1fr 60px;gap:10px;align-items:center;margin:8px 0;font-size:.9rem}
+.evalbar .track{height:16px}
+.evalbar .track i{background:var(--accent)}
+.evalbar.sys .track i{background:var(--ready)}
+.tl{display:grid;gap:10px;counter-reset:s}
+.tl .seg-t{display:grid;grid-template-columns:70px minmax(0,1fr);gap:14px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.tl .time{font:600 .85rem var(--font-mono);color:var(--accent)}
+.tl h4{margin:0 0 4px;font:700 1rem var(--font-display)}
+.tl p{font-size:.93rem;color:var(--muted)}
+.faq details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.faq details[open]{border-color:var(--accent)}
+.faq p{margin-top:8px;font-size:.94rem;color:var(--muted)}
+.road{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.road .panel{padding:16px}
+.road p{font-size:.92rem;color:var(--muted);margin-top:6px}
+pre.src{font-family:var(--font-mono);font-size:.8rem;line-height:1.5;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;max-height:480px;margin:12px 0 0;white-space:pre}
+.cmdline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface2);border-radius:10px;padding:8px 10px;margin-top:8px}
+.cmdline code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap}
+footer{padding-block:32px 48px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+@media (max-width:900px){
+  .hero,.planner,.grid2,.grid3,.road{grid-template-columns:minmax(0,1fr)}
+  .sticky{position:static}
+  .hero{padding-block:28px}
+  .sliders{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:520px){
+  .brand{display:none}
+  .cmp{grid-template-columns:minmax(0,1fr)}
+  .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tl .seg-t{grid-template-columns:minmax(0,1fr);gap:4px}
+  .evalbar{grid-template-columns:minmax(0,110px) 1fr 52px}
+  .hrow{grid-template-columns:minmax(0,1fr) 56px}
+  .hrow .track{display:none}
+}
+</style>
+
+<div class="topbar"><div class="topbar-in">
+  <span class="brand">AI Study Planner</span>
+  <nav class="nav" aria-label="Разделы">
+    <a href="#demo">Демо</a><a href="#how">Как работает</a><a href="#lab">Лаборатория</a><a href="#games">Игры</a>
+    <a href="#eval">Оценка</a><a href="#criteria">Критерии</a>
+  </nav>
+  <button class="themebtn" id="themeBtn" type="button" aria-label="Сменить тему">Тема</button>
+</div></div>
+
+<main class="wrap">
+<div class="hero">
+  <div>
+    <p class="eyebrow">AI Fundamentals · Final Project · тема 01 Mini Adaptive Quiz Coach</p>
+    <h1 style="margin-top:10px">AI Study Planner</h1>
+    <p class="lead">Студент отвечает на пять вопросов по Python. Система угадывает не только оценку, а то, что он на самом деле знает, и решает, что делать дальше: повторить тему или идти вперёд, и какое именно упражнение взять.</p>
+    <div class="cta">
+      <a class="btn primary" href="#demo">Пройти викторину</a>
+      <a class="btn" href="#games">Интерактивные игры</a>
+      <a class="btn" href="#criteria">Критерии задания</a>
+    </div>
+    <div class="facts">
+      <span class="chip">Байес</span><span class="chip">HMM · Витерби</span><span class="chip">MDP · Беллман</span><span class="chip">Hill Climbing</span>
+    </div>
+  </div>
+  <div class="pipe" aria-label="Схема: ответы → Байес и HMM → MDP → Hill Climbing → упражнение">
+    <svg viewBox="0 0 720 250" role="img">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+      <rect class="nbox" x="0" y="95" width="110" height="60" rx="12"/><text class="t1" x="14" y="122">Ответы</text><text class="t2" x="14" y="141">5 вопросов</text>
+      <rect class="nbox" x="170" y="12" width="150" height="66" rx="12"/><text class="t1" x="184" y="40">1 · Байес</text><text class="t2" x="184" y="60">P(знает тему)</text>
+      <rect class="nbox" x="170" y="172" width="150" height="66" rx="12"/><text class="t1" x="184" y="200">2 · HMM</text><text class="t2" x="184" y="220">скрытый уровень</text>
+      <rect class="nbox" x="380" y="172" width="150" height="66" rx="12"/><text class="t1" x="394" y="200">3 · MDP</text><text class="t2" x="394" y="220">Review / Next</text>
+      <rect class="nbox" x="570" y="95" width="150" height="66" rx="12"/><text class="t1" x="584" y="123">4 · Hill Climbing</text><text class="t2" x="584" y="143">лучшее упражнение</text>
+      <path class="arr" marker-end="url(#ah)" d="M110 125 C140 125 140 45 168 45"/>
+      <path class="arr" marker-end="url(#ah)" d="M110 125 C140 125 140 205 168 205"/>
+      <path class="arr" marker-end="url(#ah)" d="M320 45 H645 V93"/><text class="lab" x="470" y="36">P(K)</text>
+      <path class="arr" marker-end="url(#ah)" d="M320 205 H378"/><text class="lab" x="326" y="196">belief</text>
+      <path class="arr" marker-end="url(#ah)" d="M530 205 H645 V163"/><text class="lab" x="560" y="196">действие</text>
+    </svg>
+  </div>
+</div>
+
+<section id="demo">
+  <div class="sec-head">
+    <p class="eyebrow">Живое демо</p>
+    <h2>Пройдите викторину и наблюдайте, как система думает</h2>
+    <p>После каждого ответа пересчитываются все четыре алгоритма. Сейчас загружен пример студентки Dana, чтобы весь расчёт был виден сразу. Нажмите «Начать викторину», чтобы ввести свои ответы.</p>
+  </div>
+  <div class="planner">
+    <div class="panel">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tabQuiz" aria-selected="true">Викторина</button>
+        <button role="tab" id="tabManual" aria-selected="false">Задать ответы вручную</button>
+      </div>
+      <div id="leftPane"></div>
+    </div>
+    <div class="panel sticky" id="outPanel"></div>
+  </div>
+  <div class="grid2" style="margin-top:16px" id="algoCards"></div>
+  <div class="panel" style="margin-top:16px" id="orderExp"></div>
+</section>
+
+<section id="how">
+  <div class="sec-head">
+    <p class="eyebrow">Как это работает</p>
+    <h2>Четыре алгоритма, одна цепочка</h2>
+    <p>Выход каждого шага становится входом следующего, поэтому это не четыре несвязанных упражнения, а один продукт.</p>
+  </div>
+  <div class="grid2" id="howCards"></div>
+  <div class="panel" style="margin-top:16px"><h3>Допущения модели</h3>
+    <p class="note" style="margin-bottom:10px">Все вероятности и награды заданы вручную (разрешено заданием). Их можно менять в лаборатории ниже.</p>
+    <div class="tw"><table class="crit" style="min-width:560px"><thead><tr><th>Алгоритм</th><th>Входные параметры</th></tr></thead><tbody>
+      <tr><td>Байес</td><td>P(знает) = 0.40; P(верно | знает) = 0.85; P(верно | не знает) = 0.25. «Почти верно» считается неверным ответом.</td></tr>
+      <tr><td>HMM</td><td>Старт (Beginner 0.7, Ready 0.3); переходы B→B 0.7, B→R 0.3, R→B 0.1, R→R 0.9; эмиссии B (0.5; 0.3; 0.2), R (0.1; 0.3; 0.6) для Wrong, Partial, Correct.</td></tr>
+      <tr><td>MDP</td><td>γ = 0.9; V(Beginner) = 0, V(Ready) = 10; награды: Beginner: Review +4, NextTopic −3; Ready: Review +1, NextTopic +6.</td></tr>
+      <tr><td>Hill Climbing</td><td>5 упражнений на тип; цель 70% успеха; оценка = 1 − |P(успех) − 0.70|.</td></tr>
+    </tbody></table></div></div>
+</section>
+
+<section id="lab">
+  <div class="sec-head">
+    <p class="eyebrow">Лаборатория параметров</p>
+    <h2>Что будет, если поменять допущения</h2>
+    <p>Все вероятности в проекте заданы вручную, это разрешено заданием. Подвигайте ползунки и посмотрите, как меняются выводы демо выше.</p>
+  </div>
+  <div class="panel">
+    <div class="sliders" id="sliders"></div>
+    <div class="row-btns"><button class="btn small" id="labReset" type="button">Вернуть как в коде</button><a class="btn small" href="#demo">К демо</a></div>
+    <p class="note" style="margin-top:10px" id="labNote"></p>
+  </div>
+</section>
+
+<section id="games">
+  <div class="sec-head">
+    <p class="eyebrow">Игры</p>
+    <h2>Интерактивные примеры</h2>
+    <p>Четыре мини-игры показывают, как каждый алгоритм принимает решение. Можно сыграть вместе с аудиторией.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel game" id="gameA"></div>
+    <div class="panel game" id="gameB"></div>
+    <div class="panel game" id="gameC"></div>
+    <div class="panel game" id="gameD"></div>
+  </div>
+</section>
+
+<section id="eval">
+  <div class="sec-head">
+    <p class="eyebrow">Результаты и оценка</p>
+    <h2>Насколько система права</h2>
+    <p>Проверка на 2000 синтетических студентов, которых создаёт та же HMM. «Верное» действие: Review, если настоящий уровень Beginner, иначе NextTopic.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel">
+      <h3>Запуск Python (seed 42)</h3>
+      <div id="evalPy"></div>
+      <p class="note" style="margin-top:10px">Эти цифры в README и в <code>sample_output.txt</code>.</p>
+    </div>
+    <div class="panel">
+      <h3>Запусти симуляцию в браузере</h3>
+      <div class="sl"><label for="simN"><span>Студентов</span><span class="mono" id="simNv">2000</span></label><input id="simN" type="range" min="200" max="20000" step="200" value="2000"></div>
+      <div class="sl" style="margin-top:8px"><label for="simSeed"><span>Seed</span><span class="mono" id="simSeedv">42</span></label><input id="simSeed" type="range" min="1" max="99" step="1" value="42"></div>
+      <div class="row-btns"><button class="btn primary small" id="simRun" type="button">Запустить</button></div>
+      <div id="evalJs" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div class="msg info">Оговорка: данные созданы той же моделью, поэтому это проверка логики решения, а не доказательство качества в реальности. Генератор случайных чисел в браузере другой, поэтому цифры близки к Python, но не совпадают до десятых.</div>
+<div class="road" style="margin-top:16px">
+    <div class="panel"><h3>Данные вместо допущений</h3><p>Обучить HMM и вероятности угадывания на реальных ответах студентов (алгоритм Баума-Велша).</p></div>
+    <div class="panel"><h3>Много тем</h3><p>Байесовская сеть: знание циклов влияет на функции, функции на рекурсию.</p></div>
+    <div class="panel"><h3>План на неделю</h3><p>Value iteration или Q-learning вместо одного шага Беллмана, Simulated Annealing для большого банка упражнений.</p></div>
+  </div>
+</section>
+
+<section id="criteria">
+  <div class="sec-head">
+    <p class="eyebrow">Критерии задания</p>
+    <h2>Что требовалось и где это выполнено</h2>
+  </div>
+  <div class="tw"><table class="crit">
+    <thead><tr><th>Критерий</th><th></th><th>Как выполнено</th><th>Где посмотреть</th></tr></thead>
+    <tbody>
+      <tr><td>Реальная проблема и идея</td><td class="ok">✓</td><td>Определить знания студента по шумным ответам и подсказать следующий шаг: адаптивное обучение, как в онлайн-курсах.</td><td><a href="#demo">Демо</a></td></tr>
+      <tr><td>Не менее 3 алгоритмов из разных тем</td><td class="ok">✓</td><td>Четыре: Байес (вероятности), HMM (Lecture 7), MDP (принятие решений), Hill Climbing (локальный поиск).</td><td><a href="#how">Как работает</a></td></tr>
+      <tr><td>Алгоритмы работают на одну цель</td><td class="ok">✓</td><td>P(знает) и вера об уровне идут в MDP и Hill Climbing, на выходе одно упражнение.</td><td><a href="#demo">Строка «Что делать дальше»</a></td></tr>
+      <tr><td>Рабочая реализация</td><td class="ok">✓</td><td><code>study_planner.py</code>: демо, режим <code>--ask</code>, встроенные тесты. Этот сайт повторяет те же формулы в браузере.</td><td><a href="#demo">Демо</a></td></tr>
+      <tr><td>Объяснение каждого алгоритма</td><td class="ok">✓</td><td>Для каждого: вход, расчёт, выход, «почему выбран», формулы.</td><td><a href="#how">Как работает</a></td></tr>
+      <tr><td>Результаты, оценка, улучшения</td><td class="ok">✓</td><td>Три студента, симуляция на 2000 студентах против двух базовых методов, план развития.</td><td><a href="#eval">Оценка</a></td></tr>
+      <tr><td>Исходный код и документация</td><td class="ok">✓</td><td>Сданы вместе с проектом: <code>study_planner.py</code>, <code>README.md</code> и <code>sample_output.txt</code>.</td><td>Файлы проекта</td></tr>
+      <tr><td>Живая демонстрация и защита</td><td class="ok">✓</td><td>Интерактивное демо на этой странице и консольная версия <code>python study_planner.py</code>.</td><td><a href="#demo">Демо</a></td></tr>
+      <tr><td>Творчество и практическая польза</td><td class="ok">✓</td><td>Подбор упражнения «сложно, но решаемо» (цель 70% успеха), игры, лаборатория параметров.</td><td><a href="#games">Игры</a></td></tr>
+      <tr><td>Понимание алгоритмов</td><td class="ok">✓</td><td>Каждый шаг раскрывается формулами и числами, игры показывают логику решения.</td><td><a href="#games">Игры</a></td></tr>
+      <tr><td>Чек-лист: входы, допущения, шаги, выходы видны</td><td class="ok">✓</td><td>Все допущения в таблицах, каждый шаг с формулой и числами, раскрывающийся расчёт.</td><td><a href="#demo">Карточки алгоритмов</a></td></tr>
+      <tr><td>Чек-лист: тест и небольшой масштаб</td><td class="ok">✓</td><td>4 группы тестов (<code>ALL TESTS PASSED</code>), 5 вопросов, 2 состояния, 3 наблюдения, 2 действия.</td><td><a href="#how">Допущения</a></td></tr>
+      <tr><td>Будущее развитие</td><td class="ok">✓</td><td>Данные студентов, байесовская сеть по темам, Q-learning, Telegram-бот.</td><td><a href="#eval">Оценка</a></td></tr>
+    </tbody></table></div>
+</section>
+
+
+
+</main>
+<footer><div class="wrap">AI Study Planner · итоговый проект AI Fundamentals · тема 01. Вероятности и награды являются допущениями учебной модели. Код разработан с помощью ИИ-ассистента, авторы проекта разобрали его и могут объяснить.</div></footer>
+
+<script>
+/* Core algorithms: pure functions, no DOM. Mirrors study_planner.py exactly. */
+const Core = (function () {
+  const H = ["Beginner", "Ready"];
+  const ACTIONS = ["Review", "NextTopic"];
+  const D = { prior: 0.40, pCK: 0.85, pCN: 0.25, target: 0.70, gamma: 0.90 };
+  const P = Object.assign({}, D);
+  const PI = { Beginner: 0.7, Ready: 0.3 };
+  const A = { Beginner: { Beginner: 0.7, Ready: 0.3 }, Ready: { Beginner: 0.1, Ready: 0.9 } };
+  const B = {
+    Beginner: { Wrong: 0.5, Partial: 0.3, Correct: 0.2 },
+    Ready: { Wrong: 0.1, Partial: 0.3, Correct: 0.6 }
+  };
+  const T = {
+    Beginner: { Review: { Beginner: 0.5, Ready: 0.5 }, NextTopic: { Beginner: 0.9, Ready: 0.1 } },
+    Ready: { Review: { Beginner: 0.1, Ready: 0.9 }, NextTopic: { Beginner: 0.2, Ready: 0.8 } }
+  };
+  const R = { Beginner: { Review: 4, NextTopic: -3 }, Ready: { Review: 1, NextTopic: 6 } };
+  const V0 = { Beginner: 0, Ready: 10 };
+  const EX = {
+    Review: [
+      ["R1 print 1..10 with for", 0.98, 0.75],
+      ["R2 sum of a list with for", 0.95, 0.60],
+      ["R3 loop + if (even numbers)", 0.92, 0.45],
+      ["R4 nested loops (pattern)", 0.88, 0.30],
+      ["R5 while loop with break", 0.85, 0.20]
+    ],
+    NextTopic: [
+      ["N1 define a simple function", 0.95, 0.55],
+      ["N2 function with parameters", 0.92, 0.40],
+      ["N3 function returning a value", 0.88, 0.28],
+      ["N4 recursion: factorial", 0.80, 0.15],
+      ["N5 recursion: Fibonacci", 0.72, 0.08]
+    ]
+  };
+
+  function reset() { Object.assign(P, D); }
+
+  function bayes(ans) {
+    let p = P.prior; const steps = [];
+    for (const a of ans) {
+      const c = a === "Correct";
+      const lk = c ? P.pCK : 1 - P.pCK;
+      const ln = c ? P.pCN : 1 - P.pCN;
+      const num = lk * p;
+      const post = num / (num + ln * (1 - p));
+      steps.push({ a, c, lk, ln, prior: p, post });
+      p = post;
+    }
+    return { steps, p };
+  }
+
+  function viterbi(obs) {
+    if (!obs.length) return { delta: [], back: [], path: [], prob: null };
+    const delta = [{}], back = [{}];
+    H.forEach(h => { delta[0][h] = PI[h] * B[h][obs[0]]; });
+    for (let t = 1; t < obs.length; t++) {
+      const d = {}, bp = {};
+      for (const h of H) {
+        let bestPrev = H[0], best = -1;
+        for (const p of H) {
+          const v = delta[t - 1][p] * A[p][h];
+          if (v > best) { best = v; bestPrev = p; }
+        }
+        bp[h] = bestPrev;
+        d[h] = best * B[h][obs[t]];
+      }
+      delta.push(d); back.push(bp);
+    }
+    const n = obs.length;
+    let last = H[0];
+    for (const h of H) if (delta[n - 1][h] > delta[n - 1][last]) last = h;
+    const path = [last];
+    for (let t = n - 1; t > 0; t--) path.push(back[t][path[path.length - 1]]);
+    path.reverse();
+    return { delta, back, path, prob: delta[n - 1][last] };
+  }
+
+  function forward(obs) {
+    let alpha = {};
+    H.forEach(h => { alpha[h] = PI[h] * B[h][obs[0]]; });
+    for (let t = 1; t < obs.length; t++) {
+      const nxt = {};
+      for (const h of H) {
+        let s = 0;
+        for (const p of H) s += alpha[p] * A[p][h];
+        nxt[h] = s * B[h][obs[t]];
+      }
+      alpha = nxt;
+    }
+    const z = H.reduce((s, h) => s + alpha[h], 0);
+    const out = {};
+    H.forEach(h => { out[h] = alpha[h] / z; });
+    return out;
+  }
+
+  function qValue(s, a) {
+    let q = 0;
+    for (const s2 of H) {
+      const p = T[s][a][s2];
+      if (p) q += p * (R[s][a] + P.gamma * V0[s2]);
+    }
+    return q;
+  }
+
+  function mdp(belief) {
+    const qs = {};
+    H.forEach(s => { qs[s] = {}; ACTIONS.forEach(a => { qs[s][a] = qValue(s, a); }); });
+    const q = {};
+    ACTIONS.forEach(a => { q[a] = H.reduce((sum, s) => sum + belief[s] * qs[s][a], 0); });
+    const action = q.Review >= q.NextTopic && q.Review > q.NextTopic ? "Review"
+      : (q.NextTopic > q.Review ? "NextTopic" : "Review");
+    return { qs, q, action };
+  }
+
+  function exSuccess(ex, pk) { return ex[1] * pk + ex[2] * (1 - pk); }
+  function exScore(ex, pk) { return 1 - Math.abs(exSuccess(ex, pk) - P.target); }
+
+  function hill(bank, pk, start) {
+    let cur = start || 0;
+    const path = [cur];
+    for (;;) {
+      const sc = exScore(bank[cur], pk);
+      const nb = [cur - 1, cur + 1].filter(i => i >= 0 && i < bank.length);
+      let best = nb[0];
+      for (const i of nb) if (exScore(bank[i], pk) > exScore(bank[best], pk)) best = i;
+      if (exScore(bank[best], pk) <= sc) return { idx: cur, path };
+      cur = best; path.push(cur);
+    }
+  }
+
+  function analyze(ans) {
+    const b = bayes(ans);
+    const v = viterbi(ans);
+    const belief = ans.length ? forward(ans) : Object.assign({}, PI);
+    const m = mdp(belief);
+    const bank = EX[m.action];
+    const h = hill(bank, b.p, 0);
+    return { ans, bayes: b, vit: v, belief, mdp: m, bank, hill: h, pk: b.p,
+             exercise: bank[h.idx], success: exSuccess(bank[h.idx], b.p) };
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function simulate(n, nAns, seed) {
+    const rng = mulberry32(seed);
+    const draw = (dist) => {
+      const r = rng(); let c = 0, k = null;
+      for (const key in dist) { k = key; c += dist[key]; if (r < c) return key; }
+      return k;
+    };
+    const hits = { system: 0, always: 0, rule: 0 };
+    for (let i = 0; i < n; i++) {
+      let h = draw(PI); const levels = [], answers = [];
+      for (let t = 0; t < nAns; t++) {
+        levels.push(h); answers.push(draw(B[h])); h = draw(A[h]);
+      }
+      const truth = levels[levels.length - 1] === "Beginner" ? "Review" : "NextTopic";
+      if (mdp(forward(answers)).action === truth) hits.system++;
+      if (truth === "NextTopic") hits.always++;
+      const rule = answers.filter(x => x === "Correct").length >= 3 ? "NextTopic" : "Review";
+      if (rule === truth) hits.rule++;
+    }
+    return { system: hits.system / n, always: hits.always / n, rule: hits.rule / n, n };
+  }
+
+  return { H, ACTIONS, D, P, PI, A, B, T, R, V0, EX, reset, bayes, viterbi, forward,
+           qValue, mdp, exSuccess, exScore, hill, analyze, simulate };
+})();
+if (typeof module !== "undefined") module.exports = Core;
+
+</script>
+<script>
+(function () {
+"use strict";
+const C = Core;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+const f2 = (x) => x.toFixed(2), f3 = (x) => x.toFixed(3), pct = (x) => Math.round(x * 100) + "%";
+const SYM = { Correct: "✓", Partial: "≈", Wrong: "✕" };
+const RU = { Correct: "верно", Partial: "почти", Wrong: "неверно" };
+const CLS = { Correct: "c", Partial: "p", Wrong: "w" };
+const KIND = { c: "Correct", p: "Partial", w: "Wrong" };
+const seq = (s) => s.split("").map((ch) => KIND[ch.toLowerCase()]);
+const ACT_RU = { Review: "Повторить (Review)", NextTopic: "Идти дальше (NextTopic)" };
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+/* ---------------- quiz data ---------------- */
+const QS = [
+  { code: "for i in range(3):\n    print(i)", q: "Что выведет этот код?",
+    opts: [{ t: "1 2 3", k: "p" }, { t: "0 1 2", k: "c" }, { t: "ничего, будет ошибка", k: "w" }],
+    why: "range(3) даёт 0, 1, 2. Вариант «1 2 3» почти верный: ошибка на единицу в начале." },
+  { code: "total = 0\nfor x in [1, 2, 3]:\n    total += x\nprint(total)", q: "Что будет в total?",
+    opts: [{ t: "6", k: "c" }, { t: "3", k: "p" }, { t: "[1, 2, 3]", k: "w" }],
+    why: "Цикл складывает 1 + 2 + 3 = 6. «3» получится, если взять только последний элемент." },
+  { code: "for i in range(1, 6, 2):\n    print(i)", q: "Какие числа выведутся?",
+    opts: [{ t: "1 2 3 4 5", k: "w" }, { t: "1 3", k: "p" }, { t: "1 3 5", k: "c" }],
+    why: "Шаг 2: 1, 3, 5. Верхняя граница 6 не включается, но 5 меньше 6, поэтому 5 тоже есть." },
+  { code: "x = 5\nwhile x > 2:\n    x -= 1\nprint(x)", q: "Чему равен x в конце?",
+    opts: [{ t: "5", k: "w" }, { t: "2", k: "c" }, { t: "3", k: "p" }],
+    why: "Цикл идёт, пока x > 2. Как только x стало 2, условие ложно, и цикл остановился." },
+  { code: "def f(a, b=2):\n    return a * b\n\nprint(f(3))", q: "Что выведет программа?",
+    opts: [{ t: "Ошибка: не хватает аргумента", k: "w" }, { t: "5", k: "p" }, { t: "6", k: "c" }],
+    why: "b по умолчанию равен 2, поэтому 3 * 2 = 6. «5» получится, если сложить вместо умножения." }
+];
+
+/* ---------------- state ---------------- */
+const PRESETS = { Aida: "WWPWP", Dana: "WPWCC", Aibek: "CCPCC", "Порядок A": "WWWCC", "Порядок B": "CCWWW" };
+const st = { answers: seq(PRESETS.Dana), who: "Dana (пример)", tab: "quiz", active: false, qi: 0, fb: null };
+const cur = () => st.answers.filter(Boolean);
+
+/* ---------------- left pane ---------------- */
+function presetsHtml() {
+  return '<div class="presets" aria-label="Готовые примеры">' +
+    ["Aida", "Dana", "Aibek"].map((n) => `<button class="btn small" data-preset="${n}" type="button">${n}</button>`).join("") + "</div>" +
+    '<p class="note" style="margin-top:8px">Aida отвечает слабо, Dana растёт, Aibek уверенный.</p>';
+}
+function renderLeft() {
+  const el = $("leftPane");
+  if (st.tab === "quiz") {
+    if (!st.active) {
+      el.innerHTML = `<h3>Мини-викторина по Python</h3>
+      <p>Пять коротких вопросов по циклам и функциям. В каждом есть верный ответ, почти верный и неверный. Система различает все три.</p>
+      <div class="row-btns"><button class="btn primary" id="qStart" type="button">Начать викторину</button></div>
+      <p class="note" style="margin-top:16px">Или загрузить готового студента:</p>${presetsHtml()}`;
+      $("qStart").onclick = () => { st.answers = [null, null, null, null, null]; st.who = "Участник"; st.active = true; st.qi = 0; st.fb = null; renderAll(); };
+    } else if (st.qi >= QS.length) {
+      el.innerHTML = `<h3>Готово!</h3><p>Все пять ответов учтены. Справа и ниже видно, что решила система и почему.</p>
+      <div class="strip" style="margin-top:12px">${stripHtml()}</div>
+      <div class="row-btns"><button class="btn primary" id="qAgain" type="button">Пройти заново</button><a class="btn" href="#orderExp">Эксперимент с порядком</a></div>`;
+      $("qAgain").onclick = () => { st.answers = [null, null, null, null, null]; st.qi = 0; st.fb = null; renderAll(); };
+    } else {
+      const q = QS[st.qi];
+      el.innerHTML = `<div class="progress" aria-hidden="true"><i style="width:${(st.qi / QS.length) * 100}%"></i></div>
+      <p class="eyebrow">Вопрос ${st.qi + 1} из ${QS.length}</p>
+      <p style="margin-top:6px">${esc(q.q)}</p><div class="codeblock">${esc(q.code)}</div>
+      <div id="opts">${q.opts.map((o, i) => {
+        let c = "opt";
+        if (st.fb) { c += " show-" + o.k; if (st.fb.idx === i) c += " picked"; }
+        return `<button class="${c}" data-i="${i}" ${st.fb ? "disabled" : ""} type="button">${esc(o.t)}</button>`;
+      }).join("")}</div>
+      ${st.fb ? `<div class="fb"><b>Засчитано как «${RU[KIND[st.fb.k]]}» (${KIND[st.fb.k]}).</b> ${esc(q.why)}</div>
+      <div class="row-btns"><button class="btn primary" id="qNext" type="button">${st.qi === QS.length - 1 ? "Показать итог" : "Дальше"}</button></div>` : ""}`;
+      el.querySelectorAll(".opt").forEach((b) => b.onclick = () => {
+        const i = +b.dataset.i, k = q.opts[i].k;
+        st.answers[st.qi] = KIND[k]; st.fb = { k, idx: i }; renderAll();
+      });
+      const nx = $("qNext"); if (nx) nx.onclick = () => { st.qi++; st.fb = null; renderAll(); };
+    }
+  } else {
+    const rows = [0, 1, 2, 3, 4].map((i) => `<div class="slot"><span class="mono">Ответ ${i + 1}</span><span class="seg" role="group" aria-label="Ответ ${i + 1}">${
+      ["Wrong", "Partial", "Correct"].map((k) => `<button class="${CLS[k]}" data-slot="${i}" data-k="${k}" aria-pressed="${st.answers[i] === k}" type="button">${SYM[k]} ${RU[k]}</button>`).join("")}</span></div>`).join("");
+    el.innerHTML = `<h3>Ответы вручную</h3><p class="note">Задайте любую последовательность ответов и посмотрите, как меняется решение.</p>${rows}${presetsHtml()}
+    <div class="row-btns"><button class="btn small" id="mClear" type="button">Очистить</button></div>`;
+    el.querySelectorAll("[data-slot]").forEach((b) => b.onclick = () => { st.answers[+b.dataset.slot] = b.dataset.k; st.who = "Ручной ввод"; st.active = false; renderAll(); });
+    $("mClear").onclick = () => { st.answers = [null, null, null, null, null]; st.who = "Ручной ввод"; renderAll(); };
+  }
+  el.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => {
+    const n = b.dataset.preset; st.answers = seq(PRESETS[n]); st.who = n; st.active = false; st.qi = 0; st.fb = null; renderAll();
+  });
+}
+function stripHtml() {
+  return [0, 1, 2, 3, 4].map((i) => {
+    const a = st.answers[i];
+    return a ? `<span class="ans ${CLS[a]}">${i + 1} ${SYM[a]} ${RU[a]}</span>` : `<span class="ans">${i + 1} …</span>`;
+  }).join("");
+}
+
+/* ---------------- result panel ---------------- */
+function renderOut() {
+  const ans = cur(), r = C.analyze(ans);
+  const next = r.mdp.action === "NextTopic";
+  let html = `<p class="eyebrow">Студент: ${esc(st.who)}</p><div class="strip" style="margin-top:8px">${stripHtml()}</div>`;
+  if (!ans.length) {
+    html += `<p class="why">Ответов пока нет. Показаны стартовые значения: вера 40% и стартовое распределение HMM.</p>`;
+  }
+  html += `<div class="verdict ${next ? "next" : "review"}" aria-live="polite">
+    <span class="eyebrow">Что делать дальше</span><span class="big">${ACT_RU[r.mdp.action]}</span>
+    <span class="mono" style="font-size:.9rem">${esc(r.exercise[0])}</span></div>
+  <div class="kv"><div><b>${pct(r.pk)}</b><span>знает тему (Байес)</span></div><div><b>${pct(r.belief.Ready)}</b><span>уровень Ready (HMM)</span></div><div><b>${pct(r.success)}</b><span>шанс успеха в упражнении</span></div></div>
+  <p class="why">Ожидаемая выгода: Review ${f2(r.mdp.q.Review)} против NextTopic ${f2(r.mdp.q.NextTopic)}, поэтому выбрано «${r.mdp.action}».
+  Из пяти упражнений этого типа лучше всего подходит ${esc(r.exercise[0].split(" ")[0])}: цель ${pct(C.P.target)} успеха, у студента ${pct(r.success)}.</p>`;
+  $("outPanel").innerHTML = html;
+}
+
+/* ---------------- algorithm cards ---------------- */
+function cardHead(n, title, why) {
+  return `<div class="tag"><span class="badge">${n}</span><h3 style="margin:0">${title}</h3></div><p class="note">${why}</p>`;
+}
+function renderAlgos() {
+  const ans = cur(), r = C.analyze(ans), n = ans.length;
+  /* 1 Bayes */
+  const pts = [{ l: "старт", v: C.P.prior }].concat(r.bayes.steps.map((s, i) => ({ l: "ответ " + (i + 1), v: s.post })));
+  const bars = pts.map((p) => `<div class="bar"><em>${f2(p.v)}</em><i style="height:${Math.max(2, p.v * 80)}px"></i><small>${p.l.replace("ответ ", "")}</small></div>`).join("");
+  const last = r.bayes.steps[n - 1];
+  const bform = last ? `P(K|${last.c ? "верно" : "неверно"}) = ${f2(last.lk)}·${f3(last.prior)} / (${f2(last.lk)}·${f3(last.prior)} + ${f2(last.ln)}·${f3(1 - last.prior)}) = ${f3(last.post)}` : "P(K) = стартовая вера";
+  const bdet = r.bayes.steps.map((s, i) => `ответ ${i + 1}: ${s.c ? "верно " : "неверно"} ${f3(s.prior)} → ${f3(s.post)}`).join("\n") || "нет ответов";
+  const c1 = `<div class="panel algo">${cardHead(1, "Байес: знает ли тему?", "Ответы шумные (угадал или ошибся по невнимательности), поэтому вера обновляется, а не берётся как есть.")}
+    <div class="bars" role="img" aria-label="Вероятность знания после каждого ответа">${bars}</div>
+    <div class="formula">${esc(bform)}</div>
+    <details><summary>Показать расчёт всех шагов</summary><pre>${esc(bdet)}
+«Почти верно» (Partial) в этом шаге считается неверным ответом.</pre></details></div>`;
+  /* 2 HMM */
+  let grid = "";
+  if (n) {
+    const head = ans.map((a, i) => `<div class="hd">${i + 1} ${SYM[a]}</div>`).join("");
+    const row = (h, cls) => `<div class="hd" style="text-align:left">${h}</div>` + r.vit.delta.map((d, t) => `<div class="${r.vit.path[t] === h ? cls : ""}">${d[h].toFixed(5)}</div>`).join("");
+    grid = `<div class="hmm" style="--n:${n}"><div class="hd"></div>${head}${row("Beginner", "path-b")}${row("Ready", "path-r")}</div>`;
+  } else grid = `<p class="note">Ждём первый ответ.</p>`;
+  const pr = r.belief.Ready * 100;
+  const c2 = `<div class="panel algo">${cardHead(2, "HMM: какой уровень сейчас?", "Уровень скрыт и меняется во времени. HMM учитывает порядок ответов, чего не умеет Байес.")}
+    ${grid}
+    <div><div class="meter" role="img" aria-label="Вероятность уровня Ready ${pct(r.belief.Ready)}"><i style="width:${pr}%"></i></div>
+    <div class="legend"><span>Beginner ${pct(r.belief.Beginner)}</span><span>Ready ${pct(r.belief.Ready)}</span></div></div>
+    <div class="formula">Витерби: ${n ? esc(r.vit.path.join(" → ")) : "—"}</div>
+    <details><summary>Формулы</summary><pre>delta_t(h) = max_h' [ delta_{t-1}(h')·A(h'→h) ] · B(h, ответ_t)
+Выделены клетки самой вероятной цепочки.
+Вера «сейчас» (forward): P(Ready) = ${f3(r.belief.Ready)}</pre></details></div>`;
+  /* 3 MDP */
+  const qs = r.mdp.qs, q = r.mdp.q, mx = Math.max(Math.abs(q.Review), Math.abs(q.NextTopic), 1);
+  const w = (v) => Math.max(0, v) / mx * 100;
+  const c3 = `<div class="panel algo">${cardHead(3, "MDP: повторять или идти дальше?", "Награда сейчас плюс обесцененное будущее. Точный уровень неизвестен, поэтому усредняем по вере из HMM.")}
+    <table class="qtable"><thead><tr><th>Q(s, a)</th><th>Review</th><th>NextTopic</th></tr></thead><tbody>
+      <tr><td>Beginner</td><td>${f2(qs.Beginner.Review)}</td><td>${f2(qs.Beginner.NextTopic)}</td></tr>
+      <tr><td>Ready</td><td>${f2(qs.Ready.Review)}</td><td>${f2(qs.Ready.NextTopic)}</td></tr></tbody></table>
+    <div class="hb">${["Review", "NextTopic"].map((a) => `<div class="hrow ${r.mdp.action === a ? "on" : ""}" style="grid-template-columns:90px minmax(0,1fr) 58px"><span class="nm">${a}</span><div class="track"><i style="width:${w(q[a])}%"></i></div><span class="sc">${f2(q[a])}</span></div>`).join("")}</div>
+    <div class="formula">Q(Beginner,Review) = 0.5·(4+γ·0) + 0.5·(4+γ·10) = ${f2(C.qValue("Beginner", "Review"))}</div>
+    <details><summary>Как усредняем</summary><pre>E[Q(a)] = P(Beginner)·Q(Beginner,a) + P(Ready)·Q(Ready,a)
+Review:    ${f3(r.belief.Beginner)}·${f2(qs.Beginner.Review)} + ${f3(r.belief.Ready)}·${f2(qs.Ready.Review)} = ${f3(q.Review)}
+NextTopic: ${f3(r.belief.Beginner)}·${f2(qs.Beginner.NextTopic)} + ${f3(r.belief.Ready)}·${f2(qs.Ready.NextTopic)} = ${f3(q.NextTopic)}
+γ = ${f2(C.P.gamma)}</pre></details></div>`;
+  /* 4 Hill */
+  const rows = r.bank.map((ex, i) => {
+    const s = C.exSuccess(ex, r.pk), step = r.hill.path.indexOf(i);
+    return `<div class="hrow ${i === r.hill.idx ? "on" : ""}"><span class="nm">${step >= 0 ? `<span class="step-dot">${step + 1}</span>` : ""}${esc(ex[0])}</span>
+      <div class="track" aria-hidden="true"><i style="width:${s * 100}%"></i><u style="left:${C.P.target * 100}%"></u></div><span class="sc">${f3(C.exScore(ex, r.pk))}</span></div>`;
+  }).join("");
+  const c4 = `<div class="panel algo">${cardHead(4, "Hill Climbing: какое упражнение?", `Тип «${r.mdp.action}» выбрал MDP. Шагаем от лёгкого к сложному, пока оценка растёт. Чёрная метка: цель ${pct(C.P.target)} успеха.`)}
+    <div class="hb">${rows}</div>
+    <div class="formula">оценка = 1 − |P(успех) − ${f2(C.P.target)}|, P(знает)=${f3(r.pk)}</div>
+    <details><summary>Путь поиска</summary><pre>${r.hill.path.map((i, k) => `шаг ${k + 1}: ${r.bank[i][0]}  P(успех)=${f3(C.exSuccess(r.bank[i], r.pk))}  оценка=${f3(C.exScore(r.bank[i], r.pk))}`).join("\n")}
+Остановка: соседи не лучше текущего.</pre></details></div>`;
+  $("algoCards").innerHTML = c1 + c2 + c3 + c4;
+}
+
+/* ---------------- order experiment ---------------- */
+function renderOrder() {
+  const ans = cur();
+  if (ans.length < 3) {
+    $("orderExp").innerHTML = `<h3>Эксперимент: порядок ответов</h3><p class="note">Нужно хотя бы 3 ответа. Загрузите пример или ответьте на вопросы.</p>`; return;
+  }
+  const a = C.analyze(ans), b = C.analyze(ans.slice().reverse());
+  const same = Math.abs(a.pk - b.pk) < 1e-9, diffAct = a.mdp.action !== b.mdp.action;
+  const col = (r, title) => `<div class="col"><b>${title}</b><div class="strip" style="margin:8px 0">${r.ans.map((x, i) => `<span class="ans ${CLS[x]}">${SYM[x]}</span>`).join("")}</div>
+    <div>Байес P(знает): <b class="mono">${f3(r.pk)}</b></div><div>HMM P(Ready): <b class="mono ${same && Math.abs(a.belief.Ready - b.belief.Ready) > 1e-6 ? "diff" : ""}">${f3(r.belief.Ready)}</b></div>
+    <div>Действие: <b class="${diffAct ? "diff" : ""}">${r.mdp.action}</b></div><div class="mono" style="font-size:.85rem">${esc(r.exercise[0])}</div></div>`;
+  $("orderExp").innerHTML = `<h3>Эксперимент: те же ответы в обратном порядке</h3>
+    <div class="cmp">${col(a, "Как есть")}${col(b, "В обратном порядке")}</div>
+    <p class="why">${same ? "Байес выдаёт одну и ту же вероятность, потому что для него важен только набор ответов. " : ""}${
+      Math.abs(a.belief.Ready - b.belief.Ready) > 1e-6 ? "HMM даёт разную оценку уровня, потому что для него важно, что было последним: рост или спад. " : ""}${
+      diffAct ? "В итоге решение для студента меняется. Именно поэтому HMM нужен в проекте." : "Здесь решение совпало, но попробуйте пример «Порядок A»: WWWCC против CCWWW."}</p>
+    <div class="row-btns"><button class="btn small" data-preset="Порядок A" type="button">Загрузить WWWCC</button><button class="btn small" data-preset="Порядок B" type="button">Загрузить CCWWW</button></div>`;
+  $("orderExp").querySelectorAll("[data-preset]").forEach((b2) => b2.onclick = () => {
+    st.answers = seq(PRESETS[b2.dataset.preset]); st.who = b2.dataset.preset; st.active = false; renderAll();
+  });
+}
+
+/* ---------------- how it works (static explainers) ---------------- */
+const HOW = [
+  { n: 1, t: "Байес", q: "Знает ли студент тему?", idea: "Стартовая вера 40%. Каждый ответ пересчитывает её: верный ответ повышает, неверный понижает, но не до нуля и не до единицы, потому что бывают догадки и ошибки по невнимательности.",
+    f: "P(K|e) = P(e|K)·P(K) / [ P(e|K)·P(K) + P(e|¬K)·P(¬K) ]", ex: "Неверный ответ при вере 0.40: 0.15·0.40 / (0.15·0.40 + 0.75·0.60) = 0.06 / 0.51 = 0.118.", why: "Ответы шумные, а Байес честно работает с шумом." },
+  { n: 2, t: "HMM и Витерби", q: "Какой уровень у студента сейчас?", idea: "Уровень Beginner или Ready скрыт, а ответы его только отражают. Витерби находит самую вероятную цепочку уровней, прямой алгоритм даёт вероятность уровня сейчас.",
+    f: "delta_t(h) = max_h' [ delta_{t-1}(h')·A(h'→h) ] · B(h, o_t)", ex: "Dana: WPWCC → Beginner, Beginner, Beginner, Ready, Ready. Вероятность Ready сейчас 0.876.", why: "Уровень меняется во времени, и порядок ответов важен." },
+  { n: 3, t: "MDP и Беллман", q: "Повторять или идти дальше?", idea: "Для каждого действия считаем ожидаемую выгоду: награда сейчас плюс обесцененная ценность будущего. Так как состояние точно неизвестно, усредняем по вере из HMM.",
+    f: "Q(s,a) = Σ P(s'|s,a)·[ R(s,a) + γ·V(s') ]", ex: "Q(Beginner, Review) = 0.5·4 + 0.5·13 = 8.5. Для Dana: NextTopic 11.30 против Review 9.03.", why: "Нужно принять решение в условиях неопределённости." },
+  { n: 4, t: "Hill Climbing", q: "Какое упражнение дать?", idea: "Упражнения отсортированы от лёгкого к сложному. Сосед это чуть легче или чуть сложнее. Оценка: насколько шанс успеха близок к 70%, то есть задание сложное, но решаемое.",
+    f: "score = 1 − |P(успех) − 0.70|,  P(успех) = a·P(K) + b·(1 − P(K))", ex: "Aibek, P(K)=0.947: N1 → N2 → N3 → N4 → N5, оценка растёт до 0.986. Выбрано N5, рекурсия.", why: "Нужно выбрать лучшее из набора по оценке, шагая к соседям." }
+];
+function renderHow() {
+  $("howCards").innerHTML = HOW.map((h) => `<div class="panel algo"><div class="tag"><span class="badge">${h.n}</span><h3 style="margin:0">${h.t}</h3></div>
+    <p class="eyebrow">Вопрос: ${h.q}</p><p>${h.idea}</p><div class="formula">${esc(h.f)}</div>
+    <p class="note"><b>Пример.</b> ${esc(h.ex)}</p><p class="note"><b>Почему выбран.</b> ${h.why}</p></div>`).join("");
+}
+
+/* ---------------- lab ---------------- */
+const SL = [
+  { k: "prior", l: "Стартовая вера P(знает)", min: 0.05, max: 0.95, step: 0.01, h: "до первого ответа" },
+  { k: "pCK", l: "P(верно | знает)", min: 0.5, max: 0.99, step: 0.01, h: "1 минус вероятность ошибки по невнимательности" },
+  { k: "pCN", l: "P(верно | не знает)", min: 0.02, max: 0.5, step: 0.01, h: "вероятность угадать" },
+  { k: "target", l: "Цель: шанс успеха в упражнении", min: 0.5, max: 0.95, step: 0.01, h: "насколько сложным должно быть упражнение" }
+];
+function renderLab() {
+  $("sliders").innerHTML = SL.map((s) => `<div class="sl"><label for="sl_${s.k}"><span>${s.l}</span><span class="mono" id="slv_${s.k}">${f2(C.P[s.k])}</span></label>
+    <input id="sl_${s.k}" type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${C.P[s.k]}"><small>${s.h}</small></div>`).join("");
+  SL.forEach((s) => { $("sl_" + s.k).oninput = (e) => { C.P[s.k] = +e.target.value; $("slv_" + s.k).textContent = f2(C.P[s.k]); renderAll(true); }; });
+  labNote();
+}
+function labNote() {
+  const r = C.analyze(cur());
+  $("labNote").textContent = `Сейчас для «${st.who}»: P(знает) = ${f3(r.pk)}, решение ${r.mdp.action}, упражнение ${r.exercise[0]}.`;
+}
+$("labReset").onclick = () => { C.reset(); renderLab(); renderAll(true); };
+
+/* ---------------- games ---------------- */
+function head(title, sub) { return `<p class="eyebrow">${sub}</p><h3 style="margin-top:4px">${title}</h3>`; }
+
+/* A: guess the decision */
+const GA = { pool: [], i: 0, score: 0, done: false, shown: false };
+function gaInit() { GA.pool = shuffle(["WWWCC", "CCWWW", "WWCCC", "CWCCP", "PPPPP", "WPWPW", "CCCCC", "WWWWC", "CWWWC", "PCPCP", "CCPWW", "WCWCW"]).slice(0, 6); GA.i = 0; GA.score = 0; GA.done = false; GA.shown = false; }
+function gaRender() {
+  const el = $("gameA");
+  if (GA.done) {
+    el.innerHTML = head("Угадай решение системы", "Игра 1") + `<div class="msg info">Итог: ${GA.score} из ${GA.pool.length}. ${GA.score >= 5 ? "Рассуждения совпадают с MDP." : GA.score >= 3 ? "Неплохо. Важен порядок ответов: последние весят больше." : "Обратите внимание на конец последовательности."}</div><div class="row-btns"><button class="btn primary" id="gaAgain" type="button">Играть снова</button></div>`;
+    $("gaAgain").onclick = () => { gaInit(); gaRender(); }; return;
+  }
+  const s = GA.pool[GA.i], r = C.analyze(seq(s));
+  const rule = s.split("").filter((c) => c === "C").length >= 3 ? "NextTopic" : "Review";
+  el.innerHTML = head("Угадай решение системы", "Игра 1") + `<div class="score"><span class="pill">Раунд ${GA.i + 1} / ${GA.pool.length}</span><span class="pill">Очки ${GA.score}</span></div>
+    <p class="q">Студент ответил так. Что порекомендует система?</p><div class="strip">${seq(s).map((a, i) => `<span class="ans ${CLS[a]}">${i + 1} ${SYM[a]}</span>`).join("")}</div>
+    <div class="row-btns"><button class="btn" data-g="Review" type="button" ${GA.shown ? "disabled" : ""}>Review: повторить</button><button class="btn" data-g="NextTopic" type="button" ${GA.shown ? "disabled" : ""}>NextTopic: дальше</button></div>
+    <div id="gaFb"></div>`;
+  el.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => {
+    if (GA.shown) return; GA.shown = true;
+    const ok = b.dataset.g === r.mdp.action; if (ok) GA.score++;
+    $("gaFb").innerHTML = `<div class="msg ${ok ? "ok" : "no"}"><b>${ok ? "Верно!" : "Не совпало."}</b> Система выбрала ${r.mdp.action}: вероятность Ready ${pct(r.belief.Ready)}, Q(Review) ${f2(r.mdp.q.Review)}, Q(NextTopic) ${f2(r.mdp.q.NextTopic)}.
+      ${rule !== r.mdp.action ? `Простое правило «≥3 верных ответа» ошиблось бы: оно сказало бы ${rule}.` : ""}</div><div class="row-btns"><button class="btn primary small" id="gaNext" type="button">${GA.i === GA.pool.length - 1 ? "Итог" : "Дальше"}</button></div>`;
+    el.querySelectorAll("[data-g]").forEach((x) => x.disabled = true);
+    $("gaNext").onclick = () => { GA.i++; GA.shown = false; if (GA.i >= GA.pool.length) GA.done = true; gaRender(); };
+  });
+}
+
+/* B: Bayes detective */
+const GB = { rounds: ["C", "WW", "CWC", "CCC", "WWCW"], i: 0, pts: 0, shown: false, done: false };
+function gbRender() {
+  const el = $("gameB");
+  if (GB.done) {
+    el.innerHTML = head("Байес-детектив", "Игра 2") + `<div class="msg info">Итог: ${GB.pts} из ${GB.rounds.length * 100}. ${GB.pts >= 400 ? "Отличная вероятностная интуиция." : "Интуиция и формула расходятся, и это нормально: именно поэтому нужна формула."}</div><div class="row-btns"><button class="btn primary" id="gbAgain" type="button">Играть снова</button></div>`;
+    $("gbAgain").onclick = () => { GB.i = 0; GB.pts = 0; GB.shown = false; GB.done = false; gbRender(); }; return;
+  }
+  const s = GB.rounds[GB.i];
+  el.innerHTML = head("Байес-детектив", "Игра 2") + `<div class="score"><span class="pill">Раунд ${GB.i + 1} / ${GB.rounds.length}</span><span class="pill">Очки ${GB.pts}</span></div>
+    <p class="q">Стартовая вера ${pct(C.P.prior)}. Студент ответил так. Какова вероятность, что он знает тему?</p>
+    <div class="strip">${seq(s).map((a, i) => `<span class="ans ${CLS[a]}">${i + 1} ${SYM[a]}</span>`).join("")}</div>
+    <label class="sl" for="gbS" style="display:block;margin-top:12px"><span class="mono" id="gbV" style="font-size:1.4rem;font-weight:600">50%</span></label>
+    <input class="big" id="gbS" type="range" min="0" max="100" step="1" value="50" ${GB.shown ? "disabled" : ""}>
+    <div class="row-btns"><button class="btn primary" id="gbOk" type="button" ${GB.shown ? "disabled" : ""}>Проверить</button></div><div id="gbFb"></div>`;
+  $("gbS").oninput = (e) => { $("gbV").textContent = e.target.value + "%"; };
+  $("gbOk").onclick = () => {
+    GB.shown = true; const g = +$("gbS").value / 100, r = C.bayes(seq(s)), d = Math.abs(g - r.p);
+    const pt = Math.max(0, Math.round(100 - d * 200)); GB.pts += pt;
+    $("gbS").disabled = true; $("gbOk").disabled = true;
+    $("gbFb").innerHTML = `<div class="msg ${d < 0.1 ? "ok" : "info"}"><b>+${pt} очков.</b> Ваша оценка ${pct(g)}, по формуле ${pct(r.p)} (${f3(r.p)}). Шаги: ${r.steps.map((x) => f2(x.post)).join(" → ")}.</div>
+      <div class="row-btns"><button class="btn primary small" id="gbNext" type="button">${GB.i === GB.rounds.length - 1 ? "Итог" : "Дальше"}</button></div>`;
+    $("gbNext").onclick = () => { GB.i++; GB.shown = false; if (GB.i >= GB.rounds.length) GB.done = true; gbRender(); };
+  };
+}
+
+/* C: be the hill climber */
+const GC = { pks: [], i: 0, cur: 0, evals: 1, seen: [0], pts: 0, shown: false, done: false };
+function gcInit() { GC.pks = shuffle([0.05, 0.3, 0.55, 0.8, 0.97]); GC.i = 0; GC.pts = 0; GC.done = false; gcStart(); }
+function gcStart() { GC.cur = 0; GC.evals = 1; GC.seen = [0]; GC.shown = false; }
+function gcRender() {
+  const el = $("gameC");
+  if (GC.done) {
+    el.innerHTML = head("Вы — Hill Climbing", "Игра 3") + `<div class="msg info">Итог: ${GC.pts} из ${GC.pks.length}. Лучшее упражнение найдено в ${GC.pts} из ${GC.pks.length} раундов, при этом видно только текущее и уже посещённые.</div><div class="row-btns"><button class="btn primary" id="gcAgain" type="button">Играть снова</button></div>`;
+    $("gcAgain").onclick = () => { gcInit(); gcRender(); }; return;
+  }
+  const pk = GC.pks[GC.i], bank = pk < 0.5 ? C.EX.Review : C.EX.NextTopic;
+  const sc = (i) => C.exScore(bank[i], pk);
+  el.innerHTML = head("Вы — Hill Climbing", "Игра 3") + `<div class="score"><span class="pill">Раунд ${GC.i + 1} / ${GC.pks.length}</span><span class="pill">Очки ${GC.pts}</span><span class="pill">Проверок ${GC.evals}</span></div>
+    <p class="q">Студент знает тему на ${pct(pk)}. Цель: упражнение с шансом успеха около ${pct(C.P.target)}. Начните с самого лёгкого и шагайте к соседу, пока оценка растёт.</p>
+    <div class="ladder">${bank.map((ex, i) => `<button data-i="${i}" class="${i === GC.cur ? "here" : GC.seen.includes(i) ? "seen" : ""}" type="button">${ex[0].split(" ")[0]}</button>`).join("")}</div>
+    <div class="mono">${esc(bank[GC.cur][0])}<br>P(успех) ${f3(C.exSuccess(bank[GC.cur], pk))} · оценка ${f3(sc(GC.cur))}</div>
+    <div class="row-btns"><button class="btn small" id="gcL" type="button" ${GC.shown || GC.cur === 0 ? "disabled" : ""}>← Легче</button><button class="btn small" id="gcR" type="button" ${GC.shown || GC.cur === bank.length - 1 ? "disabled" : ""}>Сложнее →</button><button class="btn primary small" id="gcStop" type="button" ${GC.shown ? "disabled" : ""}>Стоп: это пик</button></div><div id="gcFb"></div>`;
+  const move = (d) => { const n = GC.cur + d; if (n < 0 || n >= bank.length || GC.shown) return; GC.cur = n; if (!GC.seen.includes(n)) { GC.seen.push(n); GC.evals++; } gcRender(); };
+  $("gcL").onclick = () => move(-1); $("gcR").onclick = () => move(1);
+  el.querySelectorAll(".ladder button").forEach((b) => b.onclick = () => { const d = +b.dataset.i - GC.cur; if (Math.abs(d) === 1) move(d); });
+  $("gcStop").onclick = () => {
+    GC.shown = true; const best = C.hill(bank, pk, 0).idx, ok = GC.cur === best; if (ok) GC.pts++;
+    el.querySelectorAll("button").forEach((b) => { if (!b.dataset.i) b.disabled = true; });
+    $("gcFb").innerHTML = `<div class="msg ${ok ? "ok" : "no"}"><b>${ok ? "Это пик!" : "Не пик."}</b> Алгоритм останавливается на ${esc(bank[best][0].split(" ")[0])} (оценка ${f3(sc(best))}).${ok ? "" : " У вас оценка " + f3(sc(GC.cur)) + ": сосед был лучше."}
+      Здесь только один пик, поэтому жадный шаг не застревает. При нескольких пиках помогли бы перезапуски или Simulated Annealing.</div>
+      <div class="row-btns"><button class="btn primary small" id="gcNext" type="button">${GC.i === GC.pks.length - 1 ? "Итог" : "Дальше"}</button></div>`;
+    $("gcNext").onclick = () => { GC.i++; if (GC.i >= GC.pks.length) GC.done = true; else gcStart(); gcRender(); };
+  };
+}
+
+/* D: order matters */
+const GD = { pairs: [["WWWCC", "CCWWW"], ["CWCWC", "WCWCC"], ["WWCCC", "CCCWW"], ["PWPCC", "CCPWP"]], i: 0, pts: 0, shown: false, done: false };
+function gdRender() {
+  const el = $("gameD");
+  if (GD.done) {
+    el.innerHTML = head("Кто сейчас в лучшей форме?", "Игра 4") + `<div class="msg info">Итог: ${GD.pts} из ${GD.pairs.length}. Главный вывод: набор ответов одинаков, но последние ответы показывают, где студент сейчас.</div><div class="row-btns"><button class="btn primary" id="gdAgain" type="button">Играть снова</button></div>`;
+    $("gdAgain").onclick = () => { GD.i = 0; GD.pts = 0; GD.shown = false; GD.done = false; gdRender(); }; return;
+  }
+  const [a, b] = GD.pairs[GD.i], ra = C.analyze(seq(a)), rb = C.analyze(seq(b));
+  const strip = (s) => `<div class="strip">${seq(s).map((x, i) => `<span class="ans ${CLS[x]}">${SYM[x]}</span>`).join("")}</div>`;
+  el.innerHTML = head("Кто сейчас в лучшей форме?", "Игра 4") + `<div class="score"><span class="pill">Раунд ${GD.i + 1} / ${GD.pairs.length}</span><span class="pill">Очки ${GD.pts}</span></div>
+    <p class="q">У двух студентов одинаковый набор ответов, но порядок разный. У кого выше вероятность уровня Ready прямо сейчас?</p>
+    <div class="cmp"><div class="col"><b>Студент A</b>${strip(a)}</div><div class="col"><b>Студент B</b>${strip(b)}</div></div>
+    <div class="row-btns"><button class="btn" data-g="A" type="button" ${GD.shown ? "disabled" : ""}>A</button><button class="btn" data-g="B" type="button" ${GD.shown ? "disabled" : ""}>B</button></div><div id="gdFb"></div>`;
+  el.querySelectorAll("[data-g]").forEach((bt) => bt.onclick = () => {
+    if (GD.shown) return; GD.shown = true;
+    const win = ra.belief.Ready >= rb.belief.Ready ? "A" : "B", ok = bt.dataset.g === win; if (ok) GD.pts++;
+    el.querySelectorAll("[data-g]").forEach((x) => x.disabled = true);
+    $("gdFb").innerHTML = `<div class="msg ${ok ? "ok" : "no"}"><b>${ok ? "Верно!" : "Нет."}</b> A: Ready ${pct(ra.belief.Ready)}, B: Ready ${pct(rb.belief.Ready)}. Байес для обоих выдаёт одно и то же: ${pct(ra.pk)} и ${pct(rb.pk)}. Разницу видит только HMM.</div>
+      <div class="row-btns"><button class="btn primary small" id="gdNext" type="button">${GD.i === GD.pairs.length - 1 ? "Итог" : "Дальше"}</button></div>`;
+    $("gdNext").onclick = () => { GD.i++; GD.shown = false; if (GD.i >= GD.pairs.length) GD.done = true; gdRender(); };
+  });
+}
+
+/* ---------------- evaluation ---------------- */
+function evalBars(res, cls) {
+  const rows = [["Система (HMM + MDP)", res.system, "sys"], ["Всегда NextTopic", res.always, ""], ["Правило ≥3 верных", res.rule, ""]];
+  return rows.map((r) => `<div class="evalbar ${r[2]}"><span>${r[0]}</span><div class="track"><i style="width:${r[1] * 100}%"></i></div><b class="mono">${(r[1] * 100).toFixed(1)}%</b></div>`).join("");
+}
+function renderEval() {
+  $("evalPy").innerHTML = evalBars({ system: 0.759, always: 0.702, rule: 0.576 });
+  $("simN").oninput = (e) => { $("simNv").textContent = e.target.value; };
+  $("simSeed").oninput = (e) => { $("simSeedv").textContent = e.target.value; };
+  const run = () => {
+    const res = C.simulate(+$("simN").value, 5, +$("simSeed").value);
+    $("evalJs").innerHTML = evalBars(res) + `<p class="note">${res.n} студентов, seed ${$("simSeed").value}. Система ${res.system > res.always ? "лучше" : "не лучше"} базовых методов${res.system > res.always ? " на " + ((res.system - res.always) * 100).toFixed(1) + " п.п." : ""}.</p>`;
+  };
+  $("simRun").onclick = run; run();
+}
+
+/* ---------------- plumbing ---------------- */
+function renderAll(keepLeft) {
+  if (!keepLeft) renderLeft();
+  renderOut(); renderAlgos(); renderOrder(); labNote();
+}
+$("tabQuiz").onclick = () => { st.tab = "quiz"; $("tabQuiz").setAttribute("aria-selected", "true"); $("tabManual").setAttribute("aria-selected", "false"); renderLeft(); };
+$("tabManual").onclick = () => { st.tab = "manual"; $("tabManual").setAttribute("aria-selected", "true"); $("tabQuiz").setAttribute("aria-selected", "false"); renderLeft(); };
+
+$("themeBtn").onclick = () => {
+  const root = document.documentElement, attr = root.getAttribute("data-theme");
+  const dark = attr ? attr === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.setAttribute("data-theme", dark ? "light" : "dark");
+};
+
+renderHow(); renderLab(); renderEval();
+gaInit(); gaRender(); gbRender(); gcInit(); gcRender(); gdRender();
+renderAll();
+})();
+
+</script>
