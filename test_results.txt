@@ -1,0 +1,27 @@
+test_direction_and_bounds (test_study_planner.TestBayes.test_direction_and_bounds) ... ok
+test_one_correct_answer_exact (test_study_planner.TestBayes.test_one_correct_answer_exact) ... ok
+test_one_wrong_answer_exact (test_study_planner.TestBayes.test_one_wrong_answer_exact) ... ok
+test_order_does_not_matter_for_bayes (test_study_planner.TestBayes.test_order_does_not_matter_for_bayes) ... ok
+test_belief_is_distribution (test_study_planner.TestHMM.test_belief_is_distribution) ... ok
+test_dana_belief_ready (test_study_planner.TestHMM.test_dana_belief_ready) ... ok
+test_dana_path (test_study_planner.TestHMM.test_dana_path) ... ok
+test_extremes (test_study_planner.TestHMM.test_extremes) ... ok
+test_order_matters (test_study_planner.TestHMM.test_order_matters) ... ok
+test_three_answers_like_the_topic_spec (test_study_planner.TestHMM.test_three_answers_like_the_topic_spec) ... ok
+test_aibek_gets_n5 (test_study_planner.TestHillClimbing.test_aibek_gets_n5) ... ok
+test_finds_global_best_everywhere (test_study_planner.TestHillClimbing.test_finds_global_best_everywhere) ... ok
+test_stronger_student_harder_exercise (test_study_planner.TestHillClimbing.test_stronger_student_harder_exercise) ... ok
+test_success_is_total_probability (test_study_planner.TestHillClimbing.test_success_is_total_probability) ... ok
+test_evaluation_beats_baselines (test_study_planner.TestIntegration.test_evaluation_beats_baselines) ... ok
+test_every_answer_combination_runs (test_study_planner.TestIntegration.test_every_answer_combination_runs) ... ok
+test_synthetic_student_is_reproducible (test_study_planner.TestIntegration.test_synthetic_student_is_reproducible) ... ok
+test_three_students (test_study_planner.TestIntegration.test_three_students) ... ok
+test_certain_states (test_study_planner.TestMDP.test_certain_states) ... ok
+test_dana_expected_q (test_study_planner.TestMDP.test_dana_expected_q) ... ok
+test_hand_computed_q_values (test_study_planner.TestMDP.test_hand_computed_q_values) ... ok
+test_monotone_in_belief (test_study_planner.TestMDP.test_monotone_in_belief) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.044s
+
+OK

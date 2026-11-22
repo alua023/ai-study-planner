@@ -1,0 +1,139 @@
+======================================================================
+STUDENT: Aida (struggling)   answers = ['Wrong', 'Wrong', 'Partial', 'Wrong', 'Partial']
+======================================================================
+
+[1] BAYES  input: P(K)=0.4, P(correct|K)=0.85, P(correct|~K)=0.25
+    answer 1: incorrect P(K) 0.400 -> 0.118   (0.15*0.400) / (0.15*0.400 + 0.75*0.600)
+    answer 2: incorrect P(K) 0.118 -> 0.026   (0.15*0.118) / (0.15*0.118 + 0.75*0.882)
+    answer 3: incorrect P(K) 0.026 -> 0.005   (0.15*0.026) / (0.15*0.026 + 0.75*0.974)
+    answer 4: incorrect P(K) 0.005 -> 0.001   (0.15*0.005) / (0.15*0.005 + 0.75*0.995)
+    answer 5: incorrect P(K) 0.001 -> 0.000   (0.15*0.001) / (0.15*0.001 + 0.75*0.999)
+    output: P(student knows topic) = 0.000
+    Why: answers are noisy evidence (guess / slip), so we update a belief.
+
+[2] HMM  input: hidden ('Beginner', 'Ready'), observations = the 5 answers
+    t=1 obs=Wrong   delta(Beginner)=0.35000  delta(Ready)=0.03000
+    t=2 obs=Wrong   delta(Beginner)=0.12250  delta(Ready)=0.01050
+    t=3 obs=Partial delta(Beginner)=0.02572  delta(Ready)=0.01102
+    t=4 obs=Wrong   delta(Beginner)=0.00900  delta(Ready)=0.00099
+    t=5 obs=Partial delta(Beginner)=0.00189  delta(Ready)=0.00081
+    most likely levels (Viterbi): Beginner -> Beginner -> Beginner -> Beginner -> Beginner  (prob 0.00189)
+    belief now: P(Beginner)=0.595, P(Ready)=0.405
+    Why: the level is hidden and changes over time; HMM uses answer ORDER.
+
+[3] MDP  input: belief from HMM, actions ('Review', 'NextTopic'), gamma=0.9
+    Q(Beginner,Review)=  8.50   Q(Beginner,NextTopic)= -2.10
+    Q(Ready,Review)=  9.10   Q(Ready,NextTopic)= 13.20
+    expected Q(Review) = 8.743
+    expected Q(NextTopic) = 4.096
+    output: best action = Review
+    Why: Bellman backup = reward now + discounted future, averaged over the belief.
+
+[4] HILL CLIMBING  input: 5 'Review' exercises, P(K)=0.000, target success 0.7
+    at R1 print 1..10 with for          P(success)=0.750 score=0.950
+    output: recommended exercise = R1 print 1..10 with for
+    Why: the neighbourhood is 'one step easier/harder'; we climb to the best fit.
+
+[OUTPUT]
+    P(K)=0.000 | levels=Beginner->Beginner->Beginner->Beginner->Beginner | action=Review | exercise=R1 print 1..10 with for
+
+======================================================================
+STUDENT: Dana (improving)   answers = ['Wrong', 'Partial', 'Wrong', 'Correct', 'Correct']
+======================================================================
+
+[1] BAYES  input: P(K)=0.4, P(correct|K)=0.85, P(correct|~K)=0.25
+    answer 1: incorrect P(K) 0.400 -> 0.118   (0.15*0.400) / (0.15*0.400 + 0.75*0.600)
+    answer 2: incorrect P(K) 0.118 -> 0.026   (0.15*0.118) / (0.15*0.118 + 0.75*0.882)
+    answer 3: incorrect P(K) 0.026 -> 0.005   (0.15*0.026) / (0.15*0.026 + 0.75*0.974)
+    answer 4: correct   P(K) 0.005 -> 0.018   (0.85*0.005) / (0.85*0.005 + 0.25*0.995)
+    answer 5: correct   P(K) 0.018 -> 0.058   (0.85*0.018) / (0.85*0.018 + 0.25*0.982)
+    output: P(student knows topic) = 0.058
+    Why: answers are noisy evidence (guess / slip), so we update a belief.
+
+[2] HMM  input: hidden ('Beginner', 'Ready'), observations = the 5 answers
+    t=1 obs=Wrong   delta(Beginner)=0.35000  delta(Ready)=0.03000
+    t=2 obs=Partial delta(Beginner)=0.07350  delta(Ready)=0.03150
+    t=3 obs=Wrong   delta(Beginner)=0.02572  delta(Ready)=0.00284
+    t=4 obs=Correct delta(Beginner)=0.00360  delta(Ready)=0.00463
+    t=5 obs=Correct delta(Beginner)=0.00050  delta(Ready)=0.00250
+    most likely levels (Viterbi): Beginner -> Beginner -> Beginner -> Ready -> Ready  (prob 0.00250)
+    belief now: P(Beginner)=0.124, P(Ready)=0.876
+    Why: the level is hidden and changes over time; HMM uses answer ORDER.
+
+[3] MDP  input: belief from HMM, actions ('Review', 'NextTopic'), gamma=0.9
+    Q(Beginner,Review)=  8.50   Q(Beginner,NextTopic)= -2.10
+    Q(Ready,Review)=  9.10   Q(Ready,NextTopic)= 13.20
+    expected Q(Review) = 9.025
+    expected Q(NextTopic) = 11.300
+    output: best action = NextTopic
+    Why: Bellman backup = reward now + discounted future, averaged over the belief.
+
+[4] HILL CLIMBING  input: 5 'NextTopic' exercises, P(K)=0.058, target success 0.7
+    at N1 define a simple function      P(success)=0.573 score=0.873
+    output: recommended exercise = N1 define a simple function
+    Why: the neighbourhood is 'one step easier/harder'; we climb to the best fit.
+
+[OUTPUT]
+    P(K)=0.058 | levels=Beginner->Beginner->Beginner->Ready->Ready | action=NextTopic | exercise=N1 define a simple function
+
+======================================================================
+STUDENT: Aibek (strong)   answers = ['Correct', 'Correct', 'Partial', 'Correct', 'Correct']
+======================================================================
+
+[1] BAYES  input: P(K)=0.4, P(correct|K)=0.85, P(correct|~K)=0.25
+    answer 1: correct   P(K) 0.400 -> 0.694   (0.85*0.400) / (0.85*0.400 + 0.25*0.600)
+    answer 2: correct   P(K) 0.694 -> 0.885   (0.85*0.694) / (0.85*0.694 + 0.25*0.306)
+    answer 3: incorrect P(K) 0.885 -> 0.607   (0.15*0.885) / (0.15*0.885 + 0.75*0.115)
+    answer 4: correct   P(K) 0.607 -> 0.840   (0.85*0.607) / (0.85*0.607 + 0.25*0.393)
+    answer 5: correct   P(K) 0.840 -> 0.947   (0.85*0.840) / (0.85*0.840 + 0.25*0.160)
+    output: P(student knows topic) = 0.947
+    Why: answers are noisy evidence (guess / slip), so we update a belief.
+
+[2] HMM  input: hidden ('Beginner', 'Ready'), observations = the 5 answers
+    t=1 obs=Correct delta(Beginner)=0.14000  delta(Ready)=0.18000
+    t=2 obs=Correct delta(Beginner)=0.01960  delta(Ready)=0.09720
+    t=3 obs=Partial delta(Beginner)=0.00412  delta(Ready)=0.02624
+    t=4 obs=Correct delta(Beginner)=0.00058  delta(Ready)=0.01417
+    t=5 obs=Correct delta(Beginner)=0.00028  delta(Ready)=0.00765
+    most likely levels (Viterbi): Ready -> Ready -> Ready -> Ready -> Ready  (prob 0.00765)
+    belief now: P(Beginner)=0.056, P(Ready)=0.944
+    Why: the level is hidden and changes over time; HMM uses answer ORDER.
+
+[3] MDP  input: belief from HMM, actions ('Review', 'NextTopic'), gamma=0.9
+    Q(Beginner,Review)=  8.50   Q(Beginner,NextTopic)= -2.10
+    Q(Ready,Review)=  9.10   Q(Ready,NextTopic)= 13.20
+    expected Q(Review) = 9.066
+    expected Q(NextTopic) = 12.345
+    output: best action = NextTopic
+    Why: Bellman backup = reward now + discounted future, averaged over the belief.
+
+[4] HILL CLIMBING  input: 5 'NextTopic' exercises, P(K)=0.947, target success 0.7
+    at N1 define a simple function      P(success)=0.929 score=0.771
+    at N2 function with parameters      P(success)=0.892 score=0.808
+    at N3 function returning a value    P(success)=0.848 score=0.852
+    at N4 recursion: factorial          P(success)=0.765 score=0.935
+    at N5 recursion: Fibonacci          P(success)=0.686 score=0.986
+    output: recommended exercise = N5 recursion: Fibonacci
+    Why: the neighbourhood is 'one step easier/harder'; we climb to the best fit.
+
+[OUTPUT]
+    P(K)=0.947 | levels=Ready->Ready->Ready->Ready->Ready | action=NextTopic | exercise=N5 recursion: Fibonacci
+
+======================================================================
+TESTS
+======================================================================
+  Bayes: exact posterior 0.34/0.49; correct raises, wrong lowers belief   OK
+  HMM: all correct -> Ready, all wrong -> Beginner, belief sums to 1      OK
+  MDP: certain Beginner -> Review, certain Ready -> NextTopic             OK
+  Hill climbing: finds the global best exercise for every P(K) tested;
+                 a stronger student gets a harder exercise                OK
+  ALL TESTS PASSED
+
+======================================================================
+EVALUATION: 2000 synthetic students, 5 answers each (seed 42)
+======================================================================
+  system                     accuracy = 75.9%
+  always NextTopic           accuracy = 70.2%
+  count rule (>=3 Correct)   accuracy = 57.6%
+  (data generated from the same HMM -> checks the logic, not real-world accuracy)
+
